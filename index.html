@@ -156,7 +156,7 @@
   // Global state
   const dataByYear = {};   // year -> array of rows
   let allCuisines = new Set();
-  // Selection sentinel:
+  // Tri-state selection:
   //   null  => ALL cuisines selected
   //   Set() size==0 => NONE selected
   //   Set() size>0  => SUBSET selected
@@ -186,16 +186,22 @@
   const basemaps = { osm, positron, voyager };
   osm.addTo(map);
 
-  // Layers
+  // MarkerCluster layer (tuned for big sets)
   const clusterLayer = L.markerClusterGroup({
     disableClusteringAtZoom: 17,
-    removeOutsideVisibleBounds: true,
-    chunkedLoading: true,
-    chunkDelay: 25,
-    chunkInterval: 100,
+    maxClusterRadius: 60,
     spiderfyOnMaxZoom: true,
     chunkedLoading: true,
-    maxClusterRadius: 60
+    chunkDelay: 50,
+    chunkInterval: 200,
+    removeOutsideVisibleBounds: true,
+    animateAddingMarkers: false,
+    chunkProgress: function (processed, total, elapsed) {
+      const el = document.getElementById('buildInfo');
+      if (!el) return;
+      if (processed === total) el.textContent = '';
+      else el.textContent = `Clustering… ${processed.toLocaleString()} / ${total.toLocaleString()}`;
+    },
   }).addTo(map);
 
   let heatLayer = null;
@@ -209,7 +215,7 @@
         dynamicTyping: true,
         skipEmptyLines: true,
         complete: (res) => {
-          const cleaned = res.data.map(row => ({
+          const cleaned = res.data.map(row => ({ 
             Main_Cuisine: (row.Main_Cuisine ?? row.main_cuisine ?? row.Cuisine ?? '').toString().trim(),
             Latitude: parseFloat(row.Latitude ?? row.latitude ?? row.lat),
             Longitude: parseFloat(row.Longitude ?? row.longitude ?? row.lon ?? row.lng),
@@ -251,13 +257,8 @@
     }
   }
 
-  function isAllSelected() {
-    return selectedCuisines === null;
-  }
-
-  function isNoneSelected() {
-    return (selectedCuisines instanceof Set) && selectedCuisines.size === 0;
-  }
+  function isAllSelected() { return selectedCuisines === null; }
+  function isNoneSelected() { return (selectedCuisines instanceof Set) && selectedCuisines.size === 0; }
 
   function renderCuisineList(filterText='') {
     const box = document.getElementById('cuisineBox');
@@ -275,31 +276,15 @@
       chk.type = 'checkbox';
       chk.id = id;
 
-      // Determine checked status based on sentinel
-      if (isAllSelected()) {
-        chk.checked = true;
-      } else if (isNoneSelected()) {
-        chk.checked = false;
-      } else {
-        chk.checked = selectedCuisines.has(c);
-      }
+      if (isAllSelected()) chk.checked = true;
+      else if (isNoneSelected()) chk.checked = false;
+      else chk.checked = selectedCuisines.has(c);
 
       chk.addEventListener('change', () => {
-        // If we're in ALL state, materialize to full set first
-        if (isAllSelected()) {
-          selectedCuisines = new Set(allCuisines);
-        }
-        if (chk.checked) {
-          selectedCuisines.add(c);
-        } else {
-          selectedCuisines.delete(c);
-        }
-        // Collapse back to ALL if everything selected
-        if (selectedCuisines.size === allCuisines.size) {
-          selectedCuisines = null;
-        }
+        if (isAllSelected()) selectedCuisines = new Set(allCuisines);
+        if (chk.checked) selectedCuisines.add(c); else selectedCuisines.delete(c);
+        if (selectedCuisines.size === allCuisines.size) selectedCuisines = null;
         updateMap();
-        // Keep counts in sync (quick refresh)
         refreshCuisineCounts();
       });
 
@@ -342,18 +327,9 @@
     });
   }
 
-  
-  // Build markers in chunks for large selections; support cancellation
-  let buildGen = 0;
-  async function updateMap() {
+  function updateMap() {
     const rows = getFilteredRows();
     refreshCuisineCounts();
-
-    // cancel previous build
-    buildGen += 1;
-    const myGen = buildGen;
-    const buildInfo = document.getElementById('buildInfo');
-    function setBuildInfo(msg){ if(buildInfo) buildInfo.textContent = msg || ''; }
 
     clusterLayer.clearLayers();
     if (heatLayer) { map.removeLayer(heatLayer); heatLayer = null; }
@@ -365,53 +341,29 @@
       if (heatPts.length) {
         heatLayer = L.heatLayer(heatPts, { radius: 18, blur: 16, maxZoom: 17, minOpacity: 0.35 }).addTo(map);
       }
-      setBuildInfo('');
       return;
     }
 
-    // Markers (cluster) path
-    if (!rows.length) { setBuildInfo(''); return; }
+    if (!rows.length) return;
 
-    // Chunked creation to avoid blocking
-    const BATCH = 1200;
-    let i = 0, created = 0, total = rows.length;
-
-    function makeBatch(from, to) {
-      const batch = [];
-      for (let k = from; k < to; k++) {
-        const r = rows[k];
-        // Guard against invalid coords even after prefilter
-        if (!Number.isFinite(r.Latitude) || !Number.isFinite(r.Longitude)) continue;
-        const m = L.marker([r.Latitude, r.Longitude], { title: r.Name || r.Main_Cuisine }).bindPopup(`
-          <div style="min-width:180px">
-            <div><b>${(r.Name ? r.Name.replace(/`/g, "'") : 'Unnamed')}</b></div>
-            <div>Cuisine: ${r.Main_Cuisine}</div>
-            <div>Coords: ${r.Latitude.toFixed(5)}, ${r.Longitude.toFixed(5)}</div>
-            <div>Year: ${currentYear}</div>
-          </div>
-        `);
-        batch.push(m);
-      }
-      return batch;
+    // Build marker list and let MarkerCluster's chunkedLoading handle progressive add
+    const markers = new Array(rows.length);
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
+      if (!Number.isFinite(r.Latitude) || !Number.isFinite(r.Longitude)) continue;
+      markers[i] = L.marker([r.Latitude, r.Longitude], {
+        title: r.Name || r.Main_Cuisine,
+      }).bindPopup(`
+        <div style="min-width:180px">
+          <div><b>${(r.Name ? r.Name.replace(/`/g, "'") : 'Unnamed')}</b></div>
+          <div>Cuisine: ${r.Main_Cuisine}</div>
+          <div>Coords: ${r.Latitude.toFixed(5)}, ${r.Longitude.toFixed(5)}</div>
+          <div>Year: ${currentYear}</div>
+        </div>
+      `);
     }
-
-    setBuildInfo(`Building markers… 0 / ${total.toLocaleString()}`);
-
-    while (i < total) {
-      if (myGen !== buildGen) { setBuildInfo(''); return; } // cancelled
-      const next = Math.min(i + BATCH, total);
-      const batch = makeBatch(i, next);
-      if (batch.length) clusterLayer.addLayers(batch);
-      i = next; created = i;
-      if (created % (BATCH*2) === 0 || created === total) {
-        setBuildInfo(`Building markers… ${created.toLocaleString()} / ${total.toLocaleString()}`);
-      }
-      // yield to UI
-      await new Promise(r => setTimeout(r, 0));
-    }
-    setBuildInfo('');
+    clusterLayer.addLayers(markers.filter(Boolean));
   }
-}
 
   function fitToData() {
     const rows = getFilteredRows();
@@ -429,14 +381,8 @@
     fitToData();
   });
 
-  document.getElementById('modeCluster').addEventListener('change', () => {
-    updateMap();
-    fitToData();
-  });
-  document.getElementById('modeHeat').addEventListener('change', () => {
-    updateMap();
-    fitToData();
-  });
+  document.getElementById('modeCluster').addEventListener('change', () => { updateMap(); fitToData(); });
+  document.getElementById('modeHeat').addEventListener('change', () => { updateMap(); fitToData(); });
 
   document.getElementById('basemapSelect').addEventListener('change', (e) => {
     const val = e.target.value;
@@ -445,8 +391,7 @@
   });
 
   document.getElementById('resetBtn').addEventListener('click', () => {
-    // Reset to ALL
-    selectedCuisines = null;
+    selectedCuisines = null; // All
     document.getElementById('cuisineSearch').value = '';
     renderCuisineList('');
     updateMap();
@@ -454,8 +399,7 @@
   });
 
   document.getElementById('clearBtn').addEventListener('click', () => {
-    // Clear to NONE
-    selectedCuisines = new Set();
+    selectedCuisines = new Set(); // None
     document.getElementById('cuisineSearch').value = '';
     renderCuisineList('');
     updateMap();
