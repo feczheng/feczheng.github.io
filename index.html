@@ -109,8 +109,8 @@
     </div>
 
     <div class="pill">
-      <button id="resetBtn" class="btn">Reset</button>
-      <button id="exportBtn" class="btn">Export</button>
+      <button id="resetBtn" class="btn">Reset (All)</button>
+      <button id="clearBtn" class="btn">Clear (None)</button>
     </div>
   </div>
 
@@ -126,8 +126,7 @@
   <div class="footer-note">
     Map data © OpenStreetMap contributors; tiles by OSM / Carto.<br/>
     Data collected & website created by ZHENG GANG. Supervised by Prof. Peter K. KOH.
-
-</div>
+  </div>
 </div>
 
 <script>
@@ -156,7 +155,11 @@
   // Global state
   const dataByYear = {};   // year -> array of rows
   let allCuisines = new Set();
-  let selectedCuisines = new Set();  // empty = all selected
+  // Selection sentinel:
+  //   null  => ALL cuisines selected
+  //   Set() size==0 => NONE selected
+  //   Set() size>0  => SUBSET selected
+  let selectedCuisines = null;
   let currentYear = 2018;
   let playing = false;
   let playTimer = null;
@@ -243,11 +246,21 @@
     }
   }
 
+  function isAllSelected() {
+    return selectedCuisines === null;
+  }
+
+  function isNoneSelected() {
+    return (selectedCuisines instanceof Set) && selectedCuisines.size === 0;
+  }
+
   function renderCuisineList(filterText='') {
     const box = document.getElementById('cuisineBox');
     box.innerHTML = '';
     const frag = document.createDocumentFragment();
-    for (const c of allCuisines) {
+    const allArr = Array.from(allCuisines);
+
+    for (const c of allArr) {
       if (filterText && !c.toLowerCase().includes(filterText.toLowerCase())) continue;
       const id = 'c_' + c.replace(/\W+/g, '_');
       const label = document.createElement('label');
@@ -256,12 +269,19 @@
       const chk = document.createElement('input');
       chk.type = 'checkbox';
       chk.id = id;
-      chk.checked = selectedCuisines.size === 0 || selectedCuisines.has(c);
+
+      // Determine checked status based on sentinel
+      if (isAllSelected()) {
+        chk.checked = true;
+      } else if (isNoneSelected()) {
+        chk.checked = false;
+      } else {
+        chk.checked = selectedCuisines.has(c);
+      }
+
       chk.addEventListener('change', () => {
-        // Properly handle the "all selected" sentinel:
-        // If currently "all" (empty set) and a box is toggled, first materialize the full set.
-        const wasAll = (selectedCuisines.size === 0);
-        if (wasAll) {
+        // If we're in ALL state, materialize to full set first
+        if (isAllSelected()) {
           selectedCuisines = new Set(allCuisines);
         }
         if (chk.checked) {
@@ -269,11 +289,13 @@
         } else {
           selectedCuisines.delete(c);
         }
-        // If we've re-selected everything, collapse back to "all" sentinel (empty set).
+        // Collapse back to ALL if everything selected
         if (selectedCuisines.size === allCuisines.size) {
-          selectedCuisines.clear();
+          selectedCuisines = null;
         }
         updateMap();
+        // Keep counts in sync (quick refresh)
+        refreshCuisineCounts();
       });
 
       const nameSpan = document.createElement('span');
@@ -294,7 +316,8 @@
 
   function getFilteredRows() {
     const rows = dataByYear[currentYear] || [];
-    if (selectedCuisines.size === 0) return rows;
+    if (isAllSelected()) return rows;
+    if (isNoneSelected()) return [];
     return rows.filter(r => selectedCuisines.has(r.Main_Cuisine));
   }
 
@@ -305,6 +328,7 @@
     document.getElementById('stats').innerHTML = `
       <div><b>Year:</b> <b>${currentYear}</b></div>
       <div><b>Restaurants:</b> ${total.toLocaleString()}</div>
+      <div><span class="muted">Filter:</span> ${ isAllSelected() ? 'All' : (isNoneSelected() ? 'None' : 'Subset') }</div>
     `;
     document.querySelectorAll('#cuisineBox span.muted').forEach(el => {
       const c = el.dataset.cuisine;
@@ -344,23 +368,6 @@
     }
   }
 
-  function exportCSV() {
-    const rows = getFilteredRows();
-    const headers = ["Name","Main_Cuisine","Latitude","Longitude","Year"];
-    const lines = [headers.join(",")];
-    rows.forEach(r => lines.push([
-      (r.Name ?? "").toString().replaceAll(',', ' '),
-      (r.Main_Cuisine ?? "").toString().replaceAll(',', ' '),
-      r.Latitude, r.Longitude, currentYear
-    ].join(",")));
-    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = `restaurants_${currentYear}_filtered.csv`;
-    document.body.appendChild(a); a.click(); a.remove();
-    URL.revokeObjectURL(url);
-  }
-
   function fitToData() {
     const rows = getFilteredRows();
     if (!rows.length) return;
@@ -374,10 +381,17 @@
     currentYear = +e.target.value;
     document.getElementById('yearLabel').textContent = currentYear;
     updateMap();
+    fitToData();
   });
 
-  document.getElementById('modeCluster').addEventListener('change', updateMap);
-  document.getElementById('modeHeat').addEventListener('change', updateMap);
+  document.getElementById('modeCluster').addEventListener('change', () => {
+    updateMap();
+    fitToData();
+  });
+  document.getElementById('modeHeat').addEventListener('change', () => {
+    updateMap();
+    fitToData();
+  });
 
   document.getElementById('basemapSelect').addEventListener('change', (e) => {
     const val = e.target.value;
@@ -386,13 +400,22 @@
   });
 
   document.getElementById('resetBtn').addEventListener('click', () => {
-    selectedCuisines.clear();
+    // Reset to ALL
+    selectedCuisines = null;
+    document.getElementById('cuisineSearch').value = '';
+    renderCuisineList('');
+    updateMap();
+    fitToData();
+  });
+
+  document.getElementById('clearBtn').addEventListener('click', () => {
+    // Clear to NONE
+    selectedCuisines = new Set();
     document.getElementById('cuisineSearch').value = '';
     renderCuisineList('');
     updateMap();
   });
 
-  document.getElementById('exportBtn').addEventListener('click', exportCSV);
   document.getElementById('cuisineSearch').addEventListener('input', (e) => renderCuisineList(e.target.value));
   document.getElementById('fitBtn').addEventListener('click', fitToData);
 
@@ -408,6 +431,7 @@
         currentYear = next;
         document.getElementById('yearLabel').textContent = currentYear;
         updateMap();
+        fitToData();
       }, 1200);
     } else {
       clearInterval(playTimer);
