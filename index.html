@@ -1,0 +1,385 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>HK Restaurant Cuisines | 2018–2023</title>
+
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+  <!-- MarkerCluster -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+
+  <!-- Heatmap plugin -->
+  <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+
+  <!-- PapaParse for CSV -->
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+
+  <!-- d3 for summarising -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+
+  <style>
+    html, body { height: 100%; margin: 0; }
+    #app { display: grid; grid-template-rows: auto 1fr; height: 100%; }
+    #toolbar {
+      display: grid;
+      grid-template-columns: 1fr auto auto auto auto;
+      gap: 12px;
+      align-items: center;
+      padding: 10px 12px;
+      border-bottom: 1px solid #e5e7eb;
+      background: #fafafa;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Noto Sans, Arial, sans-serif;
+    }
+    #map { width: 100%; height: 100%; }
+    .pill {
+      padding: 6px 10px; border: 1px solid #e5e7eb; border-radius: 999px; background: #fff;
+    }
+    .btn {
+      padding: 6px 10px; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; cursor: pointer;
+    }
+    .btn:active { transform: translateY(1px); }
+    .panel {
+      position: absolute; top: 10px; right: 10px; z-index: 1000;
+      background: rgba(255,255,255,0.95); border-radius: 12px; padding: 10px 12px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.08); max-width: 320px; font-size: 13px; line-height: 1.3;
+    }
+    .panel h4 { margin: 6px 0 8px 0; font-size: 14px; }
+    .flex { display: flex; align-items: center; gap: 8px; }
+    .muted { color: #6b7280; }
+    #cuisineBox { max-height: 220px; overflow: auto; padding: 6px; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; }
+    label.chk { display: grid; grid-template-columns: 18px 1fr auto; gap: 6px; align-items: center; margin: 2px 0; }
+    .footer-note { font-size: 12px; color: #6b7280; padding: 6px 12px; }
+    .badge { display:inline-block; padding:2px 6px; border-radius:999px; background:#eef2ff; color:#3730a3; font-size:12px; }
+    .warn { background:#fff7ed; color:#9a3412; }
+  </style>
+</head>
+<body>
+<div id="app">
+  <div id="toolbar">
+    <div class="flex" style="gap:14px;">
+      <div class="pill">
+        <span class="muted">Year:</span>
+        <input id="yearRange" type="range" min="2018" max="2023" step="1" value="2018" style="vertical-align: middle;">
+        <strong id="yearLabel">2018</strong>
+        <button id="playBtn" class="btn" title="Auto-play">▶︎</button>
+        <button id="fitBtn" class="btn" title="Fit to current data">Fit</button>
+      </div>
+
+      <div class="pill">
+        <span class="muted">Mode:</span>
+        <label class="flex"><input id="modeCluster" type="radio" name="mode" checked> Markers (Cluster)</label>
+        <label class="flex"><input id="modeHeat" type="radio" name="mode"> Heatmap</label>
+      </div>
+
+      <div class="pill">
+        <span class="muted">Basemap:</span>
+        <select id="basemapSelect">
+          <option value="osm">OpenStreetMap Standard</option>
+          <option value="positron">Carto Positron (light)</option>
+          <option value="voyager">Carto Voyager (color)</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="pill">
+      <span class="muted">Cuisine filter:</span>
+      <input id="cuisineSearch" placeholder="Search cuisines…" style="border:0; outline: none;">
+    </div>
+
+    <div class="pill">
+      <button id="resetBtn" class="btn">Reset</button>
+      <button id="exportBtn" class="btn">Export</button>
+    </div>
+  </div>
+
+  <div id="map"></div>
+</div>
+
+<div class="panel" id="panel">
+  <h4>Overview</h4>
+  <div id="stats"></div>
+  <div id="loadInfo" class="muted" style="margin:6px 0;"></div>
+  <h4 style="margin-top:8px;">Cuisines</h4>
+  <div id="cuisineBox"></div>
+  <div class="footer-note">
+    Map data © OpenStreetMap contributors; tiles by OSM / Carto.<br/>
+    This page is a static GitHub Pages example.
+  </div>
+</div>
+
+<script>
+  // File mapping (ensure these files exist in /data)
+  const YEAR_FILES = {
+    2018: "data/201801_processed.csv",
+    2019: "data/201901_processed.csv",
+    2020: "data/202001_processed.csv",
+    2021: "data/202101_processed.csv",
+    2022: "data/202201_processed.csv",
+    2023: "data/202301_processed.csv",
+  };
+
+  // Global state
+  const dataByYear = {};   // year -> array of rows
+  let allCuisines = new Set();
+  let selectedCuisines = new Set();  // empty = all selected
+  let currentYear = 2018;
+  let playing = false;
+  let playTimer = null;
+
+  // Leaflet map
+  const map = L.map('map', { preferCanvas: true }).setView([22.3193, 114.1694], 11);
+
+  const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+  });
+
+  const positron = L.tileLayer('https://cartodb-basemaps-{s}.global.ssl.fastly.net/light_all/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; OpenStreetMap contributors &copy; CARTO'
+  });
+
+  const voyager = L.tileLayer('https://cartodb-basemaps-{s}.global.ssl.fastly.net/rastertiles/voyager/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; OpenStreetMap contributors &copy; CARTO'
+  });
+
+  const basemaps = { osm, positron, voyager };
+  osm.addTo(map);
+
+  // Layers
+  const clusterLayer = L.markerClusterGroup({
+    disableClusteringAtZoom: 17,
+    spiderfyOnMaxZoom: true,
+    chunkedLoading: true,
+    maxClusterRadius: 60
+  }).addTo(map);
+
+  let heatLayer = null;
+
+  // Helpers
+  function loadCSV(url) {
+    return new Promise((resolve, reject) => {
+      Papa.parse(url, {
+        header: true,
+        download: true,
+        dynamicTyping: true,
+        skipEmptyLines: true,
+        complete: (res) => {
+          const cleaned = res.data.map(row => ({ 
+            Main_Cuisine: (row.Main_Cuisine ?? row.main_cuisine ?? row.Cuisine ?? '').toString().trim(),
+            Latitude: parseFloat(row.Latitude ?? row.latitude ?? row.lat),
+            Longitude: parseFloat(row.Longitude ?? row.longitude ?? row.lon ?? row.lng),
+            Name: row.Name ?? row.Restaurant_Name ?? row.name ?? '',
+          })).filter(r => Number.isFinite(r.Latitude) && Number.isFinite(r.Longitude) && r.Main_Cuisine);
+          resolve(cleaned);
+        },
+        error: (err) => reject(err)
+      });
+    });
+  }
+
+  async function initData() {
+    const years = Object.keys(YEAR_FILES).map(y => +y).sort((a,b) => a-b);
+    let info = [];
+    for (const y of years) {
+      try {
+        const rows = await loadCSV(YEAR_FILES[y]);
+        dataByYear[y] = rows;
+        rows.forEach(r => allCuisines.add(r.Main_Cuisine));
+        info.push(`<span class="badge">${y}: ${rows.length.toLocaleString()} rows</span>`);
+      } catch (e) {
+        console.warn('Failed to load', y, e);
+        dataByYear[y] = [];
+        info.push(`<span class="badge warn">${y}: 0 (failed)</span>`);
+      }
+    }
+    document.getElementById('loadInfo').innerHTML = info.join(' ');
+    // Sort cuisines
+    allCuisines = new Set(Array.from(allCuisines).sort((a,b) => a.localeCompare(b)));
+    renderCuisineList();
+
+    // Auto-switch to the first year that has data
+    const firstWithData = years.find(y => (dataByYear[y]||[]).length > 0);
+    if (firstWithData) {
+      currentYear = firstWithData;
+      document.getElementById('yearRange').value = firstWithData;
+      document.getElementById('yearLabel').textContent = firstWithData;
+    }
+  }
+
+  function renderCuisineList(filterText='') {
+    const box = document.getElementById('cuisineBox');
+    box.innerHTML = '';
+    const frag = document.createDocumentFragment();
+    for (const c of allCuisines) {
+      if (filterText && !c.toLowerCase().includes(filterText.toLowerCase())) continue;
+      const id = 'c_' + c.replace(/\W+/g, '_');
+      const label = document.createElement('label');
+      label.className = 'chk';
+
+      const chk = document.createElement('input');
+      chk.type = 'checkbox';
+      chk.id = id;
+      chk.checked = selectedCuisines.size === 0 || selectedCuisines.has(c);
+      chk.addEventListener('change', () => {
+        if (chk.checked) selectedCuisines.add(c); else selectedCuisines.delete(c);
+        if (selectedCuisines.size === allCuisines.size) selectedCuisines.clear();
+        updateMap();
+      });
+
+      const nameSpan = document.createElement('span');
+      nameSpan.textContent = c;
+
+      const count = document.createElement('span');
+      count.className = 'muted';
+      count.dataset.cuisine = c;
+
+      label.appendChild(chk);
+      label.appendChild(nameSpan);
+      label.appendChild(count);
+      frag.appendChild(label);
+    }
+    box.appendChild(frag);
+    refreshCuisineCounts();
+  }
+
+  function getFilteredRows() {
+    const rows = dataByYear[currentYear] || [];
+    if (selectedCuisines.size === 0) return rows;
+    return rows.filter(r => selectedCuisines.has(r.Main_Cuisine));
+  }
+
+  function refreshCuisineCounts() {
+    const rows = getFilteredRows();
+    const stats = d3.rollup(rows, v => v.length, d => d.Main_Cuisine);
+    const total = rows.length;
+    document.getElementById('stats').innerHTML = `
+      <div><b>Year:</b> <b>${currentYear}</b></div>
+      <div><b>Restaurants:</b> ${total.toLocaleString()}</div>
+    `;
+    document.querySelectorAll('#cuisineBox span.muted').forEach(el => {
+      const c = el.dataset.cuisine;
+      const n = stats.get(c) ?? 0;
+      el.textContent = n.toLocaleString();
+    });
+  }
+
+  function updateMap() {
+    const rows = getFilteredRows();
+    refreshCuisineCounts();
+
+    clusterLayer.clearLayers();
+    if (heatLayer) { map.removeLayer(heatLayer); heatLayer = null; }
+
+    const modeHeat = document.getElementById('modeHeat').checked;
+
+    if (modeHeat) {
+      const heatPts = rows.map(r => [r.Latitude, r.Longitude, 0.6]);
+      if (heatPts.length) {
+        heatLayer = L.heatLayer(heatPts, { radius: 18, blur: 16, maxZoom: 17, minOpacity: 0.35 }).addTo(map);
+      }
+    } else {
+      if (rows.length) {
+        const markers = rows.map(r => L.marker([r.Latitude, r.Longitude], {
+          title: r.Name || r.Main_Cuisine,
+        }).bindPopup(`
+          <div style="min-width:180px">
+            <div><b>${(r.Name ? r.Name.replace(/`/g, "'") : 'Unnamed')}</b></div>
+            <div>Cuisine: ${r.Main_Cuisine}</div>
+            <div>Coords: ${r.Latitude.toFixed(5)}, ${r.Longitude.toFixed(5)}</div>
+            <div>Year: ${currentYear}</div>
+          </div>
+        `));
+        clusterLayer.addLayers(markers);
+      }
+    }
+  }
+
+  function exportCSV() {
+    const rows = getFilteredRows();
+    const headers = ["Name","Main_Cuisine","Latitude","Longitude","Year"];
+    const lines = [headers.join(",")];
+    rows.forEach(r => lines.push([
+      (r.Name ?? "").toString().replaceAll(',', ' '),
+      (r.Main_Cuisine ?? "").toString().replaceAll(',', ' '),
+      r.Latitude, r.Longitude, currentYear
+    ].join(",")));
+    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `restaurants_${currentYear}_filtered.csv`;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function fitToData() {
+    const rows = getFilteredRows();
+    if (!rows.length) return;
+    const latlngs = rows.map(r => [r.Latitude, r.Longitude]);
+    const b = L.latLngBounds(latlngs);
+    map.fitBounds(b.pad(0.05));
+  }
+
+  // Wire events
+  document.getElementById('yearRange').addEventListener('input', (e) => {
+    currentYear = +e.target.value;
+    document.getElementById('yearLabel').textContent = currentYear;
+    updateMap();
+  });
+
+  document.getElementById('modeCluster').addEventListener('change', updateMap);
+  document.getElementById('modeHeat').addEventListener('change', updateMap);
+
+  document.getElementById('basemapSelect').addEventListener('change', (e) => {
+    const val = e.target.value;
+    Object.values(basemaps).forEach(l => map.removeLayer(l));
+    basemaps[val].addTo(map);
+  });
+
+  document.getElementById('resetBtn').addEventListener('click', () => {
+    selectedCuisines.clear();
+    document.getElementById('cuisineSearch').value = '';
+    renderCuisineList('');
+    updateMap();
+  });
+
+  document.getElementById('exportBtn').addEventListener('click', exportCSV);
+  document.getElementById('cuisineSearch').addEventListener('input', (e) => renderCuisineList(e.target.value));
+  document.getElementById('fitBtn').addEventListener('click', fitToData);
+
+  document.getElementById('playBtn').addEventListener('click', () => {
+    playing = !playing;
+    const btn = document.getElementById('playBtn');
+    btn.textContent = playing ? '⏸︎' : '▶︎';
+    if (playing) {
+      playTimer = setInterval(() => {
+        const yr = +document.getElementById('yearRange').value;
+        const next = yr >= 2023 ? 2018 : yr + 1;
+        document.getElementById('yearRange').value = next;
+        currentYear = next;
+        document.getElementById('yearLabel').textContent = currentYear;
+        updateMap();
+      }, 1200);
+    } else {
+      clearInterval(playTimer);
+    }
+  });
+
+  (async function main() {
+    document.getElementById('yearLabel').textContent = currentYear;
+    await initData();
+    updateMap();
+    fitToData();
+  })();
+</script>
+</body>
+</html>
