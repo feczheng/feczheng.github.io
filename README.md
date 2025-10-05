@@ -1,8 +1,11 @@
 # Hong Kong Restaurant Cuisines (2018–2023)
 
-Static site ready for GitHub Pages. Built with **Leaflet + OpenStreetMap**.
-Use the slider to switch years (2018–2023). Supports cuisine filtering, marker clusters,
-heatmap mode, and exporting current filters as CSV.
+Data collected and website created by **Zheng Gang**.  
+Supervised by **Prof. Peter K. Koh** (HKU).
+
+## Author
+**Zheng Gang**  
+PhD Candidate, Department of Geography, The University of Hong Kong (HKU)
 
 ## Data format
 - CSV columns required: `Main_Cuisine`, `Longitude`, `Latitude`
@@ -25,3 +28,11 @@ Open `index.html` with any static server (e.g., VS Code Live Server).
 ## Notes
 - Keep OSM/CARTO attributions.
 - If performance is an issue with many points, switch to Heatmap mode or pre-aggregate points (e.g., 400m hex bins).
+
+## Acknowledgements
+- Map tiles & data © OpenStreetMap contributors.  
+- Built with Leaflet, Leaflet.markercluster, and Leaflet.heat.
+
+## Copyright
+© 2025 **Zheng Gang**. All rights reserved.  
+Map data © OpenStreetMap contributors. Library copyrights belong to their respective owners.
