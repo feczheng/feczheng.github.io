@@ -121,6 +121,7 @@
   <h4>Overview</h4>
   <div id="stats"></div>
   <div id="loadInfo" class="muted" style="margin:6px 0;"></div>
+  <div id="buildInfo" class="muted" style="margin:6px 0;"></div>
   <h4 style="margin-top:8px;">Cuisines</h4>
   <div id="cuisineBox"></div>
   <div class="footer-note">
@@ -188,6 +189,10 @@
   // Layers
   const clusterLayer = L.markerClusterGroup({
     disableClusteringAtZoom: 17,
+    removeOutsideVisibleBounds: true,
+    chunkedLoading: true,
+    chunkDelay: 25,
+    chunkInterval: 100,
     spiderfyOnMaxZoom: true,
     chunkedLoading: true,
     maxClusterRadius: 60
@@ -337,9 +342,18 @@
     });
   }
 
-  function updateMap() {
+  
+  // Build markers in chunks for large selections; support cancellation
+  let buildGen = 0;
+  async function updateMap() {
     const rows = getFilteredRows();
     refreshCuisineCounts();
+
+    // cancel previous build
+    buildGen += 1;
+    const myGen = buildGen;
+    const buildInfo = document.getElementById('buildInfo');
+    function setBuildInfo(msg){ if(buildInfo) buildInfo.textContent = msg || ''; }
 
     clusterLayer.clearLayers();
     if (heatLayer) { map.removeLayer(heatLayer); heatLayer = null; }
@@ -351,22 +365,53 @@
       if (heatPts.length) {
         heatLayer = L.heatLayer(heatPts, { radius: 18, blur: 16, maxZoom: 17, minOpacity: 0.35 }).addTo(map);
       }
-    } else {
-      if (rows.length) {
-        const markers = rows.map(r => L.marker([r.Latitude, r.Longitude], {
-          title: r.Name || r.Main_Cuisine,
-        }).bindPopup(`
+      setBuildInfo('');
+      return;
+    }
+
+    // Markers (cluster) path
+    if (!rows.length) { setBuildInfo(''); return; }
+
+    // Chunked creation to avoid blocking
+    const BATCH = 1200;
+    let i = 0, created = 0, total = rows.length;
+
+    function makeBatch(from, to) {
+      const batch = [];
+      for (let k = from; k < to; k++) {
+        const r = rows[k];
+        // Guard against invalid coords even after prefilter
+        if (!Number.isFinite(r.Latitude) || !Number.isFinite(r.Longitude)) continue;
+        const m = L.marker([r.Latitude, r.Longitude], { title: r.Name || r.Main_Cuisine }).bindPopup(`
           <div style="min-width:180px">
             <div><b>${(r.Name ? r.Name.replace(/`/g, "'") : 'Unnamed')}</b></div>
             <div>Cuisine: ${r.Main_Cuisine}</div>
             <div>Coords: ${r.Latitude.toFixed(5)}, ${r.Longitude.toFixed(5)}</div>
             <div>Year: ${currentYear}</div>
           </div>
-        `));
-        clusterLayer.addLayers(markers);
+        `);
+        batch.push(m);
       }
+      return batch;
     }
+
+    setBuildInfo(`Building markers… 0 / ${total.toLocaleString()}`);
+
+    while (i < total) {
+      if (myGen !== buildGen) { setBuildInfo(''); return; } // cancelled
+      const next = Math.min(i + BATCH, total);
+      const batch = makeBatch(i, next);
+      if (batch.length) clusterLayer.addLayers(batch);
+      i = next; created = i;
+      if (created % (BATCH*2) === 0 || created === total) {
+        setBuildInfo(`Building markers… ${created.toLocaleString()} / ${total.toLocaleString()}`);
+      }
+      // yield to UI
+      await new Promise(r => setTimeout(r, 0));
+    }
+    setBuildInfo('');
   }
+}
 
   function fitToData() {
     const rows = getFilteredRows();
