@@ -125,8 +125,9 @@
   <div id="cuisineBox"></div>
   <div class="footer-note">
     Map data © OpenStreetMap contributors; tiles by OSM / Carto.<br/>
-    由ZHENG GANG制作
-  </div>
+    Data collected & website created by ZHENG GANG. Supervised by Prof. Peter K. KOH.
+
+</div>
 </div>
 
 <script>
@@ -257,8 +258,21 @@
       chk.id = id;
       chk.checked = selectedCuisines.size === 0 || selectedCuisines.has(c);
       chk.addEventListener('change', () => {
-        if (chk.checked) selectedCuisines.add(c); else selectedCuisines.delete(c);
-        if (selectedCuisines.size === allCuisines.size) selectedCuisines.clear();
+        // Properly handle the "all selected" sentinel:
+        // If currently "all" (empty set) and a box is toggled, first materialize the full set.
+        const wasAll = (selectedCuisines.size === 0);
+        if (wasAll) {
+          selectedCuisines = new Set(allCuisines);
+        }
+        if (chk.checked) {
+          selectedCuisines.add(c);
+        } else {
+          selectedCuisines.delete(c);
+        }
+        // If we've re-selected everything, collapse back to "all" sentinel (empty set).
+        if (selectedCuisines.size === allCuisines.size) {
+          selectedCuisines.clear();
+        }
         updateMap();
       });
 
