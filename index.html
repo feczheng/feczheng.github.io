@@ -112,10 +112,6 @@
       <button id="resetBtn" class="btn">Reset (All)</button>
       <button id="clearBtn" class="btn">Clear (None)</button>
     </div>
-  
-  <div class="pill" id="viewPill" title="Total page views (unique per browser per day)">
-    Views: <span id="viewCount">—</span>
-  </div>
   </div>
 
   <div id="map"></div>
@@ -470,81 +466,12 @@ function updateMap() {
     }
   });
 
-  
-  // Simple view counter using countapi.xyz (unique per browser per day)
-  
-  function initViewCounter() {
-    const el = document.getElementById('viewCount');
-    if (!el) return;
-
-    const NS  = 'hk-resto-map';
-    const KEY = encodeURIComponent((location.host || 'localhost') + location.pathname);
-
-    // Increment on every visit (per page load)
-    fetch(`https://api.countapi.xyz/hit/${NS}/${KEY}`)
-      .then(r => r.json())
-      .then(d => {
-        const val = (d && (d.value !== undefined)) ? d.value : 0;
-        el.textContent = Number(val).toLocaleString();
-      })
-      .catch(() => { el.textContent = '—'; });
-  } catch(e) { return false; }
-    }
-
-    // Build a stable KEY for both personal and project pages
-    function stableKey() {
-      const host = location.host || 'localhost';
-      let path = location.pathname || '/';
-      // strip index.html, collapse trailing slashes
-      path = path.replace(/index\.html$/i, '').replace(/\/+$/, '/');
-      const parts = path.split('/').filter(Boolean);
-      // On GitHub project pages, scope to "/<repo>/"
-      let scope = '/';
-      if (host.endsWith('github.io') && parts.length > 0) scope = `/${parts[0]}/`;
-      return encodeURIComponent(host + scope);
-    }
-
-    const KEY = stableKey();
-    const NS  = 'hk-resto-map';
-
-    const today = new Date().toISOString().slice(0,10);
-    const dailyStamp = `pv_seen_${KEY}_${today}`;
-    const sessStamp  = `pv_sess_${KEY}`;
-
-    const hasLocal  = storageOK('localStorage');
-    const hasSession= storageOK('sessionStorage');
-
-    const sawDaily  = hasLocal   ? !!localStorage.getItem(dailyStamp) : false;
-    const sawSess   = hasSession ? !!sessionStorage.getItem(sessStamp) : false;
-
-    // decide endpoint: default 'get'; only 'hit' if never seen today
-    const endpoint = (!sawDaily) ? 'hit' : 'get';
-
-    // set stamps BEFORE fetch to avoid multiple hits on reloads
-    if (!sawDaily && hasLocal)   { try { localStorage.setItem(dailyStamp, '1'); } catch(_) {} }
-    if (!sawSess  && hasSession) { try { sessionStorage.setItem(sessStamp, '1'); } catch(_) {} }
-
-    fetch(`https://api.countapi.xyz/${endpoint}/${NS}/${KEY}`)
-      .then(r => r.json())
-      .then(d => {
-        const val = (d && (d.value !== undefined)) ? d.value : 0;
-        el.textContent = Number(val).toLocaleString();
-      })
-      .catch(() => { el.textContent = '—'; });
-  }
-        const val = (d && (d.value !== undefined)) ? d.value : 0;
-        el.textContent = Number(val).toLocaleString();
-      })
-      .catch(() => { el.textContent = '—'; });
-  }
-
   (async function main() {
     document.getElementById('yearLabel').textContent = currentYear;
     await initData();
     updateMap();
     fitToData();
     positionPanel();
-    initViewCounter();
   })();
 </script>
 </body>
