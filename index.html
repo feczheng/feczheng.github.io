@@ -327,10 +327,61 @@
     });
   }
 
-  function updateMap() {
+  
+  // ---- Marker builder (robust & cancellable) ----
+  let __markerBuildToken = { id: 0 };
+
+  function cancelMarkerBuild() {
+    __markerBuildToken.id++;
+    const el = document.getElementById('buildInfo');
+    if (el) el.textContent = '';
+  }
+
+  function startMarkerBuild(rows) {
+    const myId = ++__markerBuildToken.id;
+    const el = document.getElementById('buildInfo');
+    const BATCH = 800;
+    let i = 0, total = rows.length;
+
+    function step() {
+      if (myId !== __markerBuildToken.id) { if (el) el.textContent = ''; return; }
+      const next = Math.min(i + BATCH, total);
+      const batch = [];
+      for (let k = i; k < next; k++) {
+        const r = rows[k];
+        if (!Number.isFinite(r.Latitude) || !Number.isFinite(r.Longitude)) continue;
+        const nm = (r.Name ? String(r.Name) : 'Unnamed').replace(/[`\\]/g, "'");
+        const cu = String(r.Main_Cuisine || '').replace(/[`\\]/g, "'");
+        const m = L.marker([r.Latitude, r.Longitude], { title: nm || cu }).bindPopup(
+          '<div style="min-width:180px">' +
+          '<div><b>' + nm + '</b></div>' +
+          '<div>Cuisine: ' + cu + '</div>' +
+          '<div>Coords: ' + r.Latitude.toFixed(5) + ', ' + r.Longitude.toFixed(5) + '</div>' +
+          '<div>Year: ' + currentYear + '</div>' +
+          '</div>'
+        );
+        batch.push(m);
+      }
+      if (batch.length) clusterLayer.addLayers(batch);
+      i = next;
+      if (el) el.textContent = (i < total)
+        ? ('Adding markers… ' + i.toLocaleString() + ' / ' + total.toLocaleString())
+        : '';
+
+      if (i < total) setTimeout(step, 0);
+    }
+    setTimeout(step, 0);
+  }
+
+  
+function updateMap() {
     const rows = getFilteredRows();
     refreshCuisineCounts();
 
+    // Cancel any previous marker build
+    cancelMarkerBuild();
+
+    // Clear layers
     clusterLayer.clearLayers();
     if (heatLayer) { map.removeLayer(heatLayer); heatLayer = null; }
 
@@ -344,26 +395,14 @@
       return;
     }
 
-    if (!rows.length) return;
-
-    // Build marker list and let MarkerCluster's chunkedLoading handle progressive add
-    const markers = new Array(rows.length);
-    for (let i = 0; i < rows.length; i++) {
-      const r = rows[i];
-      if (!Number.isFinite(r.Latitude) || !Number.isFinite(r.Longitude)) continue;
-      markers[i] = L.marker([r.Latitude, r.Longitude], {
-        title: r.Name || r.Main_Cuisine,
-      }).bindPopup(`
-        <div style="min-width:180px">
-          <div><b>${(r.Name ? r.Name.replace(/`/g, "'") : 'Unnamed')}</b></div>
-          <div>Cuisine: ${r.Main_Cuisine}</div>
-          <div>Coords: ${r.Latitude.toFixed(5)}, ${r.Longitude.toFixed(5)}</div>
-          <div>Year: ${currentYear}</div>
-        </div>
-      `);
+    if (!rows.length) {
+      const el = document.getElementById('buildInfo'); if (el) el.textContent = '';
+      return;
     }
-    clusterLayer.addLayers(markers.filter(Boolean));
-  }
+
+    // Build markers progressively
+    startMarkerBuild(rows);
+}
 
   function fitToData() {
     const rows = getFilteredRows();
