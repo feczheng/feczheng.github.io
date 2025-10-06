@@ -124,10 +124,11 @@
   <div id="buildInfo" class="muted" style="margin:6px 0;"></div>
   <h4 style="margin-top:8px;">Cuisines</h4>
   <div id="cuisineBox"></div>
-  <div class="footer-note">
-    Map data © OpenStreetMap contributors; tiles by OSM / Carto.<br/>
-    Data collected & website created by ZHENG GANG. Supervised by Prof. Peter K. KOH.
-  </div>
+   <div class="footer-note">
+      Map data © OpenStreetMap contributors; tiles by OSM / Carto.<br/>
+      Data collected and website created by Zheng Gang, with guidance from Prof. Peter K. Koh and the Koh Research Group (Department of Geography, The University of Hong Kong).
+   </div>
+
 </div>
 
 <script>
@@ -236,7 +237,7 @@
         const rows = await loadCSV(YEAR_FILES[y]);
         dataByYear[y] = rows;
         rows.forEach(r => allCuisines.add(r.Main_Cuisine));
-        info.push(`<span class="badge">${y}: ${rows.length.toLocaleString()} rows</span>`);
+        info.push(`<span class="badge">${y}: ${rows.length.toLocaleString()} restaurants</span>`);
       } catch (e) {
         console.warn('Failed to load', y, e);
         dataByYear[y] = [];
@@ -459,7 +460,7 @@ function updateMap() {
         currentYear = next;
         document.getElementById('yearLabel').textContent = currentYear;
         updateMap();
-        fitToData();
+        if (!document.getElementById('modeHeat').checked) { fitToData(); }
       }, 1200);
     } else {
       clearInterval(playTimer);
