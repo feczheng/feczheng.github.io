@@ -112,6 +112,10 @@
       <button id="resetBtn" class="btn">Reset (All)</button>
       <button id="clearBtn" class="btn">Clear (None)</button>
     </div>
+
+    <div class="pill" id="viewPill" title="Total page views (unique per browser per day)">
+      Views: <span id="viewCount">—</span>
+    </div>
   </div>
 
   <div id="map"></div>
@@ -126,7 +130,7 @@
   <div id="cuisineBox"></div>
   <div class="footer-note">
     Map data © OpenStreetMap contributors; tiles by OSM / Carto.<br/>
-    Data collected & website created by ZHENG GANG. Supervised by Prof. Peter K. KOH.
+    Data collected and website created by Zheng Gang, with guidance from Prof. Peter K. Koh and the Koh Research Group (Department of Geography, The University of Hong Kong).
   </div>
 </div>
 
@@ -211,7 +215,7 @@
     return new Promise((resolve, reject) => {
       Papa.parse(url, {
         header: true,
-        download: true,
+               download: true,
         dynamicTyping: true,
         skipEmptyLines: true,
         complete: (res) => {
@@ -236,7 +240,7 @@
         const rows = await loadCSV(YEAR_FILES[y]);
         dataByYear[y] = rows;
         rows.forEach(r => allCuisines.add(r.Main_Cuisine));
-        info.push(`<span class="badge">${y}: ${rows.length.toLocaleString()} rows</span>`);
+        info.push(`<span class="badge">${y}: ${rows.length.toLocaleString()} restaurants</span>`);
       } catch (e) {
         console.warn('Failed to load', y, e);
         dataByYear[y] = [];
@@ -268,7 +272,7 @@
 
     for (const c of allArr) {
       if (filterText && !c.toLowerCase().includes(filterText.toLowerCase())) continue;
-      const id = 'c_' + c.replace(/\W+/g, '_');
+      const id = 'c_' + c.replace(/\\W+/g, '_');
       const label = document.createElement('label');
       label.className = 'chk';
 
@@ -327,61 +331,10 @@
     });
   }
 
-  
-  // ---- Marker builder (robust & cancellable) ----
-  let __markerBuildToken = { id: 0 };
-
-  function cancelMarkerBuild() {
-    __markerBuildToken.id++;
-    const el = document.getElementById('buildInfo');
-    if (el) el.textContent = '';
-  }
-
-  function startMarkerBuild(rows) {
-    const myId = ++__markerBuildToken.id;
-    const el = document.getElementById('buildInfo');
-    const BATCH = 800;
-    let i = 0, total = rows.length;
-
-    function step() {
-      if (myId !== __markerBuildToken.id) { if (el) el.textContent = ''; return; }
-      const next = Math.min(i + BATCH, total);
-      const batch = [];
-      for (let k = i; k < next; k++) {
-        const r = rows[k];
-        if (!Number.isFinite(r.Latitude) || !Number.isFinite(r.Longitude)) continue;
-        const nm = (r.Name ? String(r.Name) : 'Unnamed').replace(/[`\\]/g, "'");
-        const cu = String(r.Main_Cuisine || '').replace(/[`\\]/g, "'");
-        const m = L.marker([r.Latitude, r.Longitude], { title: nm || cu }).bindPopup(
-          '<div style="min-width:180px">' +
-          '<div><b>' + nm + '</b></div>' +
-          '<div>Cuisine: ' + cu + '</div>' +
-          '<div>Coords: ' + r.Latitude.toFixed(5) + ', ' + r.Longitude.toFixed(5) + '</div>' +
-          '<div>Year: ' + currentYear + '</div>' +
-          '</div>'
-        );
-        batch.push(m);
-      }
-      if (batch.length) clusterLayer.addLayers(batch);
-      i = next;
-      if (el) el.textContent = (i < total)
-        ? ('Adding markers… ' + i.toLocaleString() + ' / ' + total.toLocaleString())
-        : '';
-
-      if (i < total) setTimeout(step, 0);
-    }
-    setTimeout(step, 0);
-  }
-
-  
-function updateMap() {
+  function updateMap() {
     const rows = getFilteredRows();
     refreshCuisineCounts();
 
-    // Cancel any previous marker build
-    cancelMarkerBuild();
-
-    // Clear layers
     clusterLayer.clearLayers();
     if (heatLayer) { map.removeLayer(heatLayer); heatLayer = null; }
 
@@ -395,14 +348,25 @@ function updateMap() {
       return;
     }
 
-    if (!rows.length) {
-      const el = document.getElementById('buildInfo'); if (el) el.textContent = '';
-      return;
-    }
+    if (!rows.length) return;
 
-    // Build markers progressively
-    startMarkerBuild(rows);
-}
+    const markers = new Array(rows.length);
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
+      if (!Number.isFinite(r.Latitude) || !Number.isFinite(r.Longitude)) continue;
+      markers[i] = L.marker([r.Latitude, r.Longitude], {
+        title: r.Name || r.Main_Cuisine,
+      }).bindPopup(`
+        <div style="min-width:180px">
+          <div><b>${(r.Name ? r.Name.replace(/`/g, "'") : 'Unnamed')}</b></div>
+          <div>Cuisine: ${r.Main_Cuisine}</div>
+          <div>Coords: ${r.Latitude.toFixed(5)}, ${r.Longitude.toFixed(5)}</div>
+          <div>Year: ${currentYear}</div>
+        </div>
+      `);
+    }
+    clusterLayer.addLayers(markers.filter(Boolean));
+  }
 
   function fitToData() {
     const rows = getFilteredRows();
@@ -410,6 +374,27 @@ function updateMap() {
     const latlngs = rows.map(r => [r.Latitude, r.Longitude]);
     const b = L.latLngBounds(latlngs);
     map.fitBounds(b.pad(0.05));
+  }
+
+  // Daily-unique view counter using countapi.xyz
+  function initViewCounter() {
+    const el = document.getElementById('viewCount');
+    if (!el) return;
+    const NS  = 'hk-resto-map';
+    const KEY = encodeURIComponent((location.host || 'localhost') + location.pathname);
+    const today = new Date().toISOString().slice(0,10);
+    const stamp = `pv_seen_${KEY}_${today}`;
+    const endpoint = localStorage.getItem(stamp) ? 'get' : 'hit';
+    fetch(`https://api.countapi.xyz/${endpoint}/${NS}/${KEY}`)
+      .then(r => r.json())
+      .then(d => {
+        if (!localStorage.getItem(stamp) && d && (d.value !== undefined)) {
+          localStorage.setItem(stamp, '1');
+        }
+        const val = (d && (d.value !== undefined)) ? d.value : 0;
+        el.textContent = Number(val).toLocaleString();
+      })
+      .catch(() => { el.textContent = '—'; });
   }
 
   // Wire events
@@ -459,7 +444,8 @@ function updateMap() {
         currentYear = next;
         document.getElementById('yearLabel').textContent = currentYear;
         updateMap();
-        fitToData();
+        // Do not auto-fit during autoplay if Heatmap is active
+        if (!document.getElementById('modeHeat').checked) { fitToData(); }
       }, 1200);
     } else {
       clearInterval(playTimer);
@@ -472,6 +458,7 @@ function updateMap() {
     updateMap();
     fitToData();
     positionPanel();
+    initViewCounter();
   })();
 </script>
 </body>
