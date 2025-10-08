@@ -112,10 +112,6 @@
       <button id="resetBtn" class="btn">Reset (All)</button>
       <button id="clearBtn" class="btn">Clear (None)</button>
     </div>
-  
-  <div class="pill">
-    <button id="measureBtn" class="btn" title="Estimate heatmap area at current zoom">Measure heat area</button>
-  </div>
   </div>
 
   <div id="map"></div>
@@ -477,48 +473,6 @@ function updateMap() {
     fitToData();
     positionPanel();
   })();
-
-  // Estimate heatmap area at current zoom by thresholding heat canvas alpha
-  function measureHeatArea(thresholdAlpha = 64) {
-    if (typeof heatLayer === 'undefined' || !heatLayer) {
-      alert('Please switch to Heatmap mode first.');
-      return;
-    }
-    let canvas = heatLayer._canvas;
-    if (!canvas && heatLayer._heatmap && heatLayer._heatmap._canvas) {
-      canvas = heatLayer._heatmap._canvas;
-    }
-    if (!canvas) {
-      alert('Heatmap canvas is not ready yet. Try again in a moment.');
-      return;
-    }
-    const ctx = canvas.getContext('2d');
-    const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const data = img.data;
-
-    let hotPixels = 0;
-    for (let i = 3; i < data.length; i += 4) {
-      if (data[i] >= thresholdAlpha) hotPixels++;
-    }
-
-    const c = map.getCenter();
-    const z = map.getZoom();
-    const metersPerPixel = 156543.03392 * Math.cos(c.lat * Math.PI/180) / Math.pow(2, z);
-    const area_m2 = hotPixels * metersPerPixel * metersPerPixel;
-    const area_km2 = area_m2 / 1e6;
-
-    alert(`Heat area (alpha ≥ ${thresholdAlpha}/255) ≈ ${area_km2.toFixed(2)} km² at zoom ${z}`);
-  }
 </script>
-
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-  var btn = document.getElementById('measureBtn');
-  if (btn && typeof measureHeatArea === 'function') {
-    btn.addEventListener('click', function(){ measureHeatArea(64); });
-  }
-});
-</script>
-
 </body>
 </html>
