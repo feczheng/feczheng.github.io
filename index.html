@@ -112,10 +112,6 @@
       <button id="resetBtn" class="btn">Reset (All)</button>
       <button id="clearBtn" class="btn">Clear (None)</button>
     </div>
-  
-  <div class="pill">
-    <button id="measureBtn" class="btn" title="Estimate heatmap area at current zoom">Measure heat area</button>
-  </div>
   </div>
 
   <div id="map"></div>
@@ -128,10 +124,11 @@
   <div id="buildInfo" class="muted" style="margin:6px 0;"></div>
   <h4 style="margin-top:8px;">Cuisines</h4>
   <div id="cuisineBox"></div>
-  <div class="footer-note">
-    Map data © OpenStreetMap contributors; tiles by OSM / Carto.<br/>
-    Data collected & website created by ZHENG GANG. Supervised by Prof. Peter K. KOH.
-  </div>
+   <div class="footer-note">
+      Map data © OpenStreetMap contributors; tiles by OSM / Carto.<br/>
+      Data collected and website created by Zheng Gang, with guidance from Prof. Peter K. Koh and the Koh Research Group (Department of Geography, The University of Hong Kong).
+   </div>
+
 </div>
 
 <script>
@@ -450,7 +447,6 @@ function updateMap() {
 
   document.getElementById('cuisineSearch').addEventListener('input', (e) => renderCuisineList(e.target.value));
   document.getElementById('fitBtn').addEventListener('click', fitToData);
-  document.getElementById('measureBtn').addEventListener('click', () => measureHeatArea(64));
 
   document.getElementById('playBtn').addEventListener('click', () => {
     playing = !playing;
@@ -470,32 +466,6 @@ function updateMap() {
       clearInterval(playTimer);
     }
   });
-
-  
-  // Estimate heatmap area at current zoom by thresholding heat canvas alpha
-  function measureHeatArea(thresholdAlpha = 64) {
-    if (!window.heatLayer || !heatLayer._canvas) {
-      alert('Please switch to Heatmap mode first.');
-      return;
-    }
-    const canvas = heatLayer._canvas;
-    const ctx = canvas.getContext('2d');
-    const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const data = img.data;
-
-    let hotPixels = 0;
-    for (let i = 3; i < data.length; i += 4) {
-      if (data[i] >= thresholdAlpha) hotPixels++;
-    }
-
-    const c = map.getCenter();
-    const z = map.getZoom();
-    const metersPerPixel = 156543.03392 * Math.cos(c.lat * Math.PI/180) / Math.pow(2, z);
-    const area_m2 = hotPixels * metersPerPixel * metersPerPixel;
-    const area_km2 = area_m2 / 1e6;
-
-    alert(`Heat area (alpha ≥ ${thresholdAlpha}/255) ≈ ${area_km2.toFixed(2)} km² at zoom ${z}`);
-  }
 
   (async function main() {
     document.getElementById('yearLabel').textContent = currentYear;
