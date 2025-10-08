@@ -1,3 +1,11 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Wed Oct  8 15:13:44 2025
+
+@author: fecmacbook
+"""
+
 <!doctype html>
 <html lang="en">
 <head>
@@ -111,6 +119,8 @@
     <div class="pill">
       <button id="resetBtn" class="btn">Reset (All)</button>
       <button id="clearBtn" class="btn">Clear (None)</button>
+      <!-- 新增：Heatmap 面积计算按钮 -->
+      <button id="measureBtn" class="btn" title="Estimate heatmap area at current zoom">Measure heat area</button>
     </div>
   </div>
 
@@ -127,6 +137,7 @@
    <div class="footer-note">
       Map data © OpenStreetMap contributors; tiles by OSM / Carto.<br/>
       Data collected and website created by Zheng Gang, with guidance from Prof. Peter K. Koh and the Koh Research Group (Department of Geography, The University of Hong Kong).
+      <span class="muted">— build 20251008-01</span>
    </div>
 
 </div>
@@ -150,7 +161,7 @@
     2019: "data/201901_processed.csv",
     2020: "data/202001_processed.csv",
     2021: "data/202101_processed.csv",
-    2022: "data/202201_processed.csv",
+    2022: "data/202202_processed.csv", /* 如果你的真实文件是 202201_processed.csv，请改回去 */
     2023: "data/202301_processed.csv",
   };
 
@@ -216,7 +227,7 @@
         dynamicTyping: true,
         skipEmptyLines: true,
         complete: (res) => {
-          const cleaned = res.data.map(row => ({ 
+          const cleaned = res.data.map(row => ({
             Main_Cuisine: (row.Main_Cuisine ?? row.main_cuisine ?? row.Cuisine ?? '').toString().trim(),
             Latitude: parseFloat(row.Latitude ?? row.latitude ?? row.lat),
             Longitude: parseFloat(row.Longitude ?? row.longitude ?? row.lon ?? row.lng),
@@ -328,7 +339,6 @@
     });
   }
 
-  
   // ---- Marker builder (robust & cancellable) ----
   let __markerBuildToken = { id: 0 };
 
@@ -374,7 +384,6 @@
     setTimeout(step, 0);
   }
 
-  
 function updateMap() {
     const rows = getFilteredRows();
     refreshCuisineCounts();
@@ -413,6 +422,42 @@ function updateMap() {
     map.fitBounds(b.pad(0.05));
   }
 
+  /* 新增：在当前缩放下估算 Heatmap 面积（阈值法）
+     thresholdAlpha ∈ [0..255]；例如 64 ≈ 25% 透明度。
+     注意：这是可视化近似（像素核），结果会随缩放变化。 */
+  function measureHeatArea(thresholdAlpha = 64) {
+    if (!heatLayer) {
+      alert('Please switch to Heatmap mode first.');
+      return;
+    }
+    // 兼容不同 leaflet.heat 版本
+    let canvas = heatLayer._canvas;
+    if (!canvas && heatLayer._heatmap && heatLayer._heatmap._canvas) {
+      canvas = heatLayer._heatmap._canvas;
+    }
+    if (!canvas) {
+      alert('Heatmap canvas is not ready yet. Try again in a moment.');
+      return;
+    }
+    const ctx = canvas.getContext('2d');
+    const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = img.data;
+
+    let hotPixels = 0;
+    for (let i = 3; i < data.length; i += 4) { // 只看 alpha 通道
+      if (data[i] >= thresholdAlpha) hotPixels++;
+    }
+
+    // 用地图中心的分辨率近似换算（香港区域内误差较小）
+    const c = map.getCenter();
+    const z = map.getZoom();
+    const metersPerPixel = 156543.03392 * Math.cos(c.lat * Math.PI/180) / Math.pow(2, z);
+    const area_m2 = hotPixels * metersPerPixel * metersPerPixel;
+    const area_km2 = area_m2 / 1e6;
+
+    alert(`Heat area (alpha ≥ ${thresholdAlpha}/255) ≈ ${area_km2.toFixed(2)} km² at zoom ${z}`);
+  }
+
   // Wire events
   document.getElementById('yearRange').addEventListener('input', (e) => {
     currentYear = +e.target.value;
@@ -445,6 +490,9 @@ function updateMap() {
     updateMap();
   });
 
+  // 新增：面积计算按钮
+  document.getElementById('measureBtn').addEventListener('click', () => measureHeatArea(64));
+
   document.getElementById('cuisineSearch').addEventListener('input', (e) => renderCuisineList(e.target.value));
   document.getElementById('fitBtn').addEventListener('click', fitToData);
 
@@ -460,6 +508,7 @@ function updateMap() {
         currentYear = next;
         document.getElementById('yearLabel').textContent = currentYear;
         updateMap();
+        // 注意：自动播放时 Heatmap 下不自动 fit（保持你之前的行为）
         if (!document.getElementById('modeHeat').checked) { fitToData(); }
       }, 1200);
     } else {
