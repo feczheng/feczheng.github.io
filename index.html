@@ -112,10 +112,10 @@
       <button id="resetBtn" class="btn">Reset (All)</button>
       <button id="clearBtn" class="btn">Clear (None)</button>
     </div>
-
-    <div class="pill" id="viewPill" title="Total page views (unique per browser per day)">
-      Views: <span id="viewCount">—</span>
-    </div>
+  
+  <div class="pill">
+    <button id="measureBtn" class="btn" title="Estimate heatmap area at current zoom">Measure heat area</button>
+  </div>
   </div>
 
   <div id="map"></div>
@@ -130,7 +130,7 @@
   <div id="cuisineBox"></div>
   <div class="footer-note">
     Map data © OpenStreetMap contributors; tiles by OSM / Carto.<br/>
-    Data collected and website created by Zheng Gang, with guidance from Prof. Peter K. Koh and the Koh Research Group (Department of Geography, The University of Hong Kong).
+    Data collected & website created by ZHENG GANG. Supervised by Prof. Peter K. KOH.
   </div>
 </div>
 
@@ -215,7 +215,7 @@
     return new Promise((resolve, reject) => {
       Papa.parse(url, {
         header: true,
-               download: true,
+        download: true,
         dynamicTyping: true,
         skipEmptyLines: true,
         complete: (res) => {
@@ -272,7 +272,7 @@
 
     for (const c of allArr) {
       if (filterText && !c.toLowerCase().includes(filterText.toLowerCase())) continue;
-      const id = 'c_' + c.replace(/\\W+/g, '_');
+      const id = 'c_' + c.replace(/\W+/g, '_');
       const label = document.createElement('label');
       label.className = 'chk';
 
@@ -331,10 +331,61 @@
     });
   }
 
-  function updateMap() {
+  
+  // ---- Marker builder (robust & cancellable) ----
+  let __markerBuildToken = { id: 0 };
+
+  function cancelMarkerBuild() {
+    __markerBuildToken.id++;
+    const el = document.getElementById('buildInfo');
+    if (el) el.textContent = '';
+  }
+
+  function startMarkerBuild(rows) {
+    const myId = ++__markerBuildToken.id;
+    const el = document.getElementById('buildInfo');
+    const BATCH = 800;
+    let i = 0, total = rows.length;
+
+    function step() {
+      if (myId !== __markerBuildToken.id) { if (el) el.textContent = ''; return; }
+      const next = Math.min(i + BATCH, total);
+      const batch = [];
+      for (let k = i; k < next; k++) {
+        const r = rows[k];
+        if (!Number.isFinite(r.Latitude) || !Number.isFinite(r.Longitude)) continue;
+        const nm = (r.Name ? String(r.Name) : 'Unnamed').replace(/[`\\]/g, "'");
+        const cu = String(r.Main_Cuisine || '').replace(/[`\\]/g, "'");
+        const m = L.marker([r.Latitude, r.Longitude], { title: nm || cu }).bindPopup(
+          '<div style="min-width:180px">' +
+          '<div><b>' + nm + '</b></div>' +
+          '<div>Cuisine: ' + cu + '</div>' +
+          '<div>Coords: ' + r.Latitude.toFixed(5) + ', ' + r.Longitude.toFixed(5) + '</div>' +
+          '<div>Year: ' + currentYear + '</div>' +
+          '</div>'
+        );
+        batch.push(m);
+      }
+      if (batch.length) clusterLayer.addLayers(batch);
+      i = next;
+      if (el) el.textContent = (i < total)
+        ? ('Adding markers… ' + i.toLocaleString() + ' / ' + total.toLocaleString())
+        : '';
+
+      if (i < total) setTimeout(step, 0);
+    }
+    setTimeout(step, 0);
+  }
+
+  
+function updateMap() {
     const rows = getFilteredRows();
     refreshCuisineCounts();
 
+    // Cancel any previous marker build
+    cancelMarkerBuild();
+
+    // Clear layers
     clusterLayer.clearLayers();
     if (heatLayer) { map.removeLayer(heatLayer); heatLayer = null; }
 
@@ -348,25 +399,14 @@
       return;
     }
 
-    if (!rows.length) return;
-
-    const markers = new Array(rows.length);
-    for (let i = 0; i < rows.length; i++) {
-      const r = rows[i];
-      if (!Number.isFinite(r.Latitude) || !Number.isFinite(r.Longitude)) continue;
-      markers[i] = L.marker([r.Latitude, r.Longitude], {
-        title: r.Name || r.Main_Cuisine,
-      }).bindPopup(`
-        <div style="min-width:180px">
-          <div><b>${(r.Name ? r.Name.replace(/`/g, "'") : 'Unnamed')}</b></div>
-          <div>Cuisine: ${r.Main_Cuisine}</div>
-          <div>Coords: ${r.Latitude.toFixed(5)}, ${r.Longitude.toFixed(5)}</div>
-          <div>Year: ${currentYear}</div>
-        </div>
-      `);
+    if (!rows.length) {
+      const el = document.getElementById('buildInfo'); if (el) el.textContent = '';
+      return;
     }
-    clusterLayer.addLayers(markers.filter(Boolean));
-  }
+
+    // Build markers progressively
+    startMarkerBuild(rows);
+}
 
   function fitToData() {
     const rows = getFilteredRows();
@@ -374,27 +414,6 @@
     const latlngs = rows.map(r => [r.Latitude, r.Longitude]);
     const b = L.latLngBounds(latlngs);
     map.fitBounds(b.pad(0.05));
-  }
-
-  // Daily-unique view counter using countapi.xyz
-  function initViewCounter() {
-    const el = document.getElementById('viewCount');
-    if (!el) return;
-    const NS  = 'hk-resto-map';
-    const KEY = encodeURIComponent((location.host || 'localhost') + location.pathname);
-    const today = new Date().toISOString().slice(0,10);
-    const stamp = `pv_seen_${KEY}_${today}`;
-    const endpoint = localStorage.getItem(stamp) ? 'get' : 'hit';
-    fetch(`https://api.countapi.xyz/${endpoint}/${NS}/${KEY}`)
-      .then(r => r.json())
-      .then(d => {
-        if (!localStorage.getItem(stamp) && d && (d.value !== undefined)) {
-          localStorage.setItem(stamp, '1');
-        }
-        const val = (d && (d.value !== undefined)) ? d.value : 0;
-        el.textContent = Number(val).toLocaleString();
-      })
-      .catch(() => { el.textContent = '—'; });
   }
 
   // Wire events
@@ -431,6 +450,7 @@
 
   document.getElementById('cuisineSearch').addEventListener('input', (e) => renderCuisineList(e.target.value));
   document.getElementById('fitBtn').addEventListener('click', fitToData);
+  document.getElementById('measureBtn').addEventListener('click', () => measureHeatArea(64));
 
   document.getElementById('playBtn').addEventListener('click', () => {
     playing = !playing;
@@ -444,7 +464,6 @@
         currentYear = next;
         document.getElementById('yearLabel').textContent = currentYear;
         updateMap();
-        // Do not auto-fit during autoplay if Heatmap is active
         if (!document.getElementById('modeHeat').checked) { fitToData(); }
       }, 1200);
     } else {
@@ -452,13 +471,38 @@
     }
   });
 
+  
+  // Estimate heatmap area at current zoom by thresholding heat canvas alpha
+  function measureHeatArea(thresholdAlpha = 64) {
+    if (!window.heatLayer || !heatLayer._canvas) {
+      alert('Please switch to Heatmap mode first.');
+      return;
+    }
+    const canvas = heatLayer._canvas;
+    const ctx = canvas.getContext('2d');
+    const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = img.data;
+
+    let hotPixels = 0;
+    for (let i = 3; i < data.length; i += 4) {
+      if (data[i] >= thresholdAlpha) hotPixels++;
+    }
+
+    const c = map.getCenter();
+    const z = map.getZoom();
+    const metersPerPixel = 156543.03392 * Math.cos(c.lat * Math.PI/180) / Math.pow(2, z);
+    const area_m2 = hotPixels * metersPerPixel * metersPerPixel;
+    const area_km2 = area_m2 / 1e6;
+
+    alert(`Heat area (alpha ≥ ${thresholdAlpha}/255) ≈ ${area_km2.toFixed(2)} km² at zoom ${z}`);
+  }
+
   (async function main() {
     document.getElementById('yearLabel').textContent = currentYear;
     await initData();
     updateMap();
     fitToData();
     positionPanel();
-    initViewCounter();
   })();
 </script>
 </body>
