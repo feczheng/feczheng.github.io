@@ -1,13 +1,16 @@
+
 <!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>HK Restaurant Cuisines | 2016–2025</title>
+  <title>HK Restaurant Cuisines | 2018–2023</title>
 
   <!-- Leaflet -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 
   <!-- MarkerCluster -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
@@ -39,14 +42,20 @@
       z-index: 500;
     }
     #map { width: 100%; height: 100%; }
-    .pill { padding: 6px 10px; border: 1px solid #e5e7eb; border-radius: 999px; background: #fff; }
-    .btn { padding: 6px 10px; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; cursor: pointer; }
+    .pill {
+      padding: 6px 10px; border: 1px solid #e5e7eb; border-radius: 999px; background: #fff;
+    }
+    .btn {
+      padding: 6px 10px; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; cursor: pointer;
+    }
     .btn:active { transform: translateY(1px); }
     .panel {
       position: absolute; right: 10px; z-index: 1000;
       background: rgba(255,255,255,0.97); border-radius: 12px; padding: 10px 12px;
       box-shadow: 0 8px 24px rgba(0,0,0,0.08); max-width: 320px; font-size: 13px; line-height: 1.3;
-      top: 80px; max-height: calc(100vh - 120px); overflow: auto;
+      top: 80px; /* fallback below toolbar */
+      max-height: calc(100vh - 120px);
+      overflow: auto;
     }
     .panel h4 { margin: 6px 0 8px 0; font-size: 14px; }
     .flex { display: flex; align-items: center; gap: 8px; }
@@ -57,7 +66,13 @@
     .badge { display:inline-block; padding:2px 6px; border-radius:999px; background:#eef2ff; color:#3730a3; font-size:12px; }
     .warn { background:#fff7ed; color:#9a3412; }
     @media (max-width: 900px) {
-      .panel { left: 50%; right: auto; transform: translateX(-50%); width: min(92vw, 360px); max-height: 45vh; }
+      .panel {
+        left: 50%;
+        right: auto;
+        transform: translateX(-50%);
+        width: min(92vw, 360px);
+        max-height: 45vh;
+      }
     }
   </style>
 </head>
@@ -67,8 +82,8 @@
     <div class="flex" style="gap:14px;">
       <div class="pill">
         <span class="muted">Year:</span>
-        <input id="yearRange" type="range" min="2016" max="2025" step="1" value="2016" style="vertical-align: middle;">
-        <strong id="yearLabel">2016</strong>
+        <input id="yearRange" type="range" min="2018" max="2023" step="1" value="2018" style="vertical-align: middle;">
+        <strong id="yearLabel">2018</strong>
         <button id="playBtn" class="btn" title="Auto-play">▶︎</button>
         <button id="fitBtn" class="btn" title="Fit to current data">Fit</button>
       </div>
@@ -97,6 +112,7 @@
     <div class="pill">
       <button id="resetBtn" class="btn">Reset (All)</button>
       <button id="clearBtn" class="btn">Clear (None)</button>
+      <!-- 新增：Heatmap 面积计算按钮 -->
       <button id="measureBtn" class="btn" title="Estimate heatmap area at current zoom">Measure heat area</button>
     </div>
   </div>
@@ -114,59 +130,68 @@
    <div class="footer-note">
       Map data © OpenStreetMap contributors; tiles by OSM / Carto.<br/>
       Data collected and website created by Zheng Gang, with guidance from Prof. Peter K. Koh and the Koh Research Group (Department of Geography, The University of Hong Kong).
-      <span class="muted">— build 20251010-01</span>
+      <span class="muted">— build 20251008-01</span>
    </div>
+
 </div>
 
 <script>
-  // Position panel under toolbar
+  // Place panel dynamically under toolbar (prevents overlap)
   function positionPanel() {
     const tb = document.getElementById('toolbar');
     const panel = document.getElementById('panel');
     if (!tb || !panel) return;
-    const top = tb.offsetHeight + 10;
+    const top = tb.offsetHeight + 10; // 10px gap
     panel.style.top = top + 'px';
-    panel.style.maxHeight = 'calc(100vh - ' + (top + 20) + 'px)';
+    panel.style.maxHeight = 'calc(100vh - ' + (top + 20) + 'px)'; // keep some bottom margin
   }
   window.addEventListener('load', positionPanel);
   window.addEventListener('resize', positionPanel);
 
-  // Year -> CSV path (缺失年份会加载失败但不影响整体)
+  // File mapping
   const YEAR_FILES = {
-    2016: "data/201601_processed.csv",
-    2017: "data/201701_processed.csv",
     2018: "data/201801_processed.csv",
     2019: "data/201901_processed.csv",
     2020: "data/202001_processed.csv",
     2021: "data/202101_processed.csv",
-    2022: "data/202201_processed.csv",
+    2022: "data/202201_processed.csv", /* 如果你的真实文件是 202201_processed.csv，请改回去 */
     2023: "data/202301_processed.csv",
-    2024: "data/202401_processed.csv",
-    2025: "data/202501_processed.csv"
   };
 
-  // State
-  const dataByYear = {};
+  // Global state
+  const dataByYear = {};   // year -> array of rows
   let allCuisines = new Set();
-  let orderedCuisines = []; // 排序后的菜系（Other 置底 + 强制包含 Thai / Vietnamese）
-  let selectedCuisines = null; // null=All, Set.size==0=None, Set>0=Subset
-  let currentYear = 2016;
-  let playing = false, playTimer = null;
+  // Tri-state selection:
+  //   null  => ALL cuisines selected
+  //   Set() size==0 => NONE selected
+  //   Set() size>0  => SUBSET selected
+  let selectedCuisines = null;
+  let currentYear = 2018;
+  let playing = false;
+  let playTimer = null;
 
-  // Map & basemaps
+  // Leaflet map
   const map = L.map('map', { preferCanvas: true }).setView([22.3193, 114.1694], 11);
-  const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19, attribution: '&copy; OpenStreetMap contributors'
-  }).addTo(map);
-  const positron = L.tileLayer('https://cartodb-basemaps-{s}.global.ssl.fastly.net/light_all/{z}/{x}/{y}.png', {
-    maxZoom: 19, attribution: '&copy; OpenStreetMap contributors &copy; CARTO'
-  });
-  const voyager = L.tileLayer('https://cartodb-basemaps-{s}.global.ssl.fastly.net/rastertiles/voyager/{z}/{x}/{y}.png', {
-    maxZoom: 19, attribution: '&copy; OpenStreetMap contributors &copy; CARTO'
-  });
-  const basemaps = { osm, positron, voyager };
 
-  // Marker clusters
+  const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+  });
+
+  const positron = L.tileLayer('https://cartodb-basemaps-{s}.global.ssl.fastly.net/light_all/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; OpenStreetMap contributors &copy; CARTO'
+  });
+
+  const voyager = L.tileLayer('https://cartodb-basemaps-{s}.global.ssl.fastly.net/rastertiles/voyager/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; OpenStreetMap contributors &copy; CARTO'
+  });
+
+  const basemaps = { osm, positron, voyager };
+  osm.addTo(map);
+
+  // MarkerCluster layer (tuned for big sets)
   const clusterLayer = L.markerClusterGroup({
     disableClusteringAtZoom: 17,
     maxClusterRadius: 60,
@@ -176,22 +201,24 @@
     chunkInterval: 200,
     removeOutsideVisibleBounds: true,
     animateAddingMarkers: false,
-    polygonOptions: { color: '#3b82f6', weight: 2, opacity: 0.8, fillOpacity: 0.1 },
-    chunkProgress: function (processed, total) {
+    chunkProgress: function (processed, total, elapsed) {
       const el = document.getElementById('buildInfo');
       if (!el) return;
       if (processed === total) el.textContent = '';
       else el.textContent = `Clustering… ${processed.toLocaleString()} / ${total.toLocaleString()}`;
-    }
+    },
   }).addTo(map);
 
   let heatLayer = null;
 
-  // CSV loader
+  // Helpers
   function loadCSV(url) {
     return new Promise((resolve, reject) => {
       Papa.parse(url, {
-        header: true, download: true, dynamicTyping: true, skipEmptyLines: true,
+        header: true,
+        download: true,
+        dynamicTyping: true,
+        skipEmptyLines: true,
         complete: (res) => {
           const cleaned = res.data.map(row => ({
             Main_Cuisine: (row.Main_Cuisine ?? row.main_cuisine ?? row.Cuisine ?? '').toString().trim(),
@@ -201,34 +228,14 @@
           })).filter(r => Number.isFinite(r.Latitude) && Number.isFinite(r.Longitude) && r.Main_Cuisine);
           resolve(cleaned);
         },
-        error: reject
+        error: (err) => reject(err)
       });
     });
   }
 
-  // 构造“排序后的菜系”数组：Thai/Vietnamese 强制加入；Other 永远放最后；其余按字母序
-  function computeOrderedCuisines() {
-    let arr = Array.from(allCuisines);
-    // 强制包含
-    ['Thai','Vietnamese'].forEach(t => {
-      if (!arr.some(x => x.toLowerCase() === t.toLowerCase())) {
-        arr.push(t);
-        allCuisines.add(t); // 使其在选择集内也可被选中（即使该年为 0）
-      }
-    });
-    // 排序：除 Other 外按字母序；Other 放末尾
-    arr.sort((a,b) => {
-      const ao = a.toLowerCase()==='other', bo = b.toLowerCase()==='other';
-      if (ao && !bo) return 1;
-      if (!ao && bo) return -1;
-      return a.localeCompare(b);
-    });
-    return arr;
-  }
-
   async function initData() {
-    const years = Object.keys(YEAR_FILES).map(Number).sort((a,b)=>a-b);
-    const info = [];
+    const years = Object.keys(YEAR_FILES).map(y => +y).sort((a,b) => a-b);
+    let info = [];
     for (const y of years) {
       try {
         const rows = await loadCSV(YEAR_FILES[y]);
@@ -242,12 +249,12 @@
       }
     }
     document.getElementById('loadInfo').innerHTML = info.join(' ');
-    // 计算排序后的菜系
-    orderedCuisines = computeOrderedCuisines();
-    renderCuisineList('');
+    // Sort cuisines
+    allCuisines = new Set(Array.from(allCuisines).sort((a,b) => a.localeCompare(b)));
+    renderCuisineList();
 
-    // Jump to first year with data
-    const firstWithData = years.find(y => (dataByYear[y]||[]).length>0);
+    // Auto-switch to the first year that has data
+    const firstWithData = years.find(y => (dataByYear[y]||[]).length > 0);
     if (firstWithData) {
       currentYear = firstWithData;
       document.getElementById('yearRange').value = firstWithData;
@@ -255,34 +262,47 @@
     }
   }
 
-  function isAllSelected(){ return selectedCuisines === null; }
-  function isNoneSelected(){ return (selectedCuisines instanceof Set) && selectedCuisines.size===0; }
+  function isAllSelected() { return selectedCuisines === null; }
+  function isNoneSelected() { return (selectedCuisines instanceof Set) && selectedCuisines.size === 0; }
 
   function renderCuisineList(filterText='') {
     const box = document.getElementById('cuisineBox');
     box.innerHTML = '';
     const frag = document.createDocumentFragment();
+    const allArr = Array.from(allCuisines);
 
-    for (const c of orderedCuisines) {
+    for (const c of allArr) {
       if (filterText && !c.toLowerCase().includes(filterText.toLowerCase())) continue;
-      const label = document.createElement('label'); label.className='chk';
-      const chk = document.createElement('input'); chk.type='checkbox';
+      const id = 'c_' + c.replace(/\W+/g, '_');
+      const label = document.createElement('label');
+      label.className = 'chk';
+
+      const chk = document.createElement('input');
+      chk.type = 'checkbox';
+      chk.id = id;
 
       if (isAllSelected()) chk.checked = true;
       else if (isNoneSelected()) chk.checked = false;
       else chk.checked = selectedCuisines.has(c);
 
-      chk.addEventListener('change', ()=>{
+      chk.addEventListener('change', () => {
         if (isAllSelected()) selectedCuisines = new Set(allCuisines);
         if (chk.checked) selectedCuisines.add(c); else selectedCuisines.delete(c);
         if (selectedCuisines.size === allCuisines.size) selectedCuisines = null;
-        updateMap(); refreshCuisineCounts();
+        updateMap();
+        refreshCuisineCounts();
       });
 
-      const nameSpan = document.createElement('span'); nameSpan.textContent = c;
-      const count = document.createElement('span'); count.className='muted'; count.dataset.cuisine = c;
+      const nameSpan = document.createElement('span');
+      nameSpan.textContent = c;
 
-      label.appendChild(chk); label.appendChild(nameSpan); label.appendChild(count);
+      const count = document.createElement('span');
+      count.className = 'muted';
+      count.dataset.cuisine = c;
+
+      label.appendChild(chk);
+      label.appendChild(nameSpan);
+      label.appendChild(count);
       frag.appendChild(label);
     }
     box.appendChild(frag);
@@ -298,57 +318,78 @@
 
   function refreshCuisineCounts() {
     const rows = getFilteredRows();
-    const stats = d3.rollup(rows, v=>v.length, d=>d.Main_Cuisine);
+    const stats = d3.rollup(rows, v => v.length, d => d.Main_Cuisine);
     const total = rows.length;
     document.getElementById('stats').innerHTML = `
       <div><b>Year:</b> <b>${currentYear}</b></div>
       <div><b>Restaurants:</b> ${total.toLocaleString()}</div>
       <div><span class="muted">Filter:</span> ${ isAllSelected() ? 'All' : (isNoneSelected() ? 'None' : 'Subset') }</div>
     `;
-    document.querySelectorAll('#cuisineBox span.muted').forEach(el=>{
+    document.querySelectorAll('#cuisineBox span.muted').forEach(el => {
       const c = el.dataset.cuisine;
       const n = stats.get(c) ?? 0;
       el.textContent = n.toLocaleString();
     });
   }
 
-  // Marker builder (batch)
+  // ---- Marker builder (robust & cancellable) ----
   let __markerBuildToken = { id: 0 };
-  function cancelMarkerBuild() { __markerBuildToken.id++; const el = document.getElementById('buildInfo'); if (el) el.textContent=''; }
+
+  function cancelMarkerBuild() {
+    __markerBuildToken.id++;
+    const el = document.getElementById('buildInfo');
+    if (el) el.textContent = '';
+  }
+
   function startMarkerBuild(rows) {
     const myId = ++__markerBuildToken.id;
     const el = document.getElementById('buildInfo');
-    const BATCH = 800; let i=0, total=rows.length;
-    function step(){
-      if (myId !== __markerBuildToken.id) { if (el) el.textContent=''; return; }
-      const next = Math.min(i+BATCH, total); const batch=[];
-      for (let k=i;k<next;k++){
+    const BATCH = 800;
+    let i = 0, total = rows.length;
+
+    function step() {
+      if (myId !== __markerBuildToken.id) { if (el) el.textContent = ''; return; }
+      const next = Math.min(i + BATCH, total);
+      const batch = [];
+      for (let k = i; k < next; k++) {
         const r = rows[k];
         if (!Number.isFinite(r.Latitude) || !Number.isFinite(r.Longitude)) continue;
-        const nm = (r.Name ? String(r.Name) : 'Unnamed').replace(/[`\\]/g,"'");
-        const cu = String(r.Main_Cuisine || '').replace(/[`\\]/g,"'");
-        batch.push(L.marker([r.Latitude, r.Longitude], { title: nm || cu }).bindPopup(
-          '<div style="min-width:180px"><div><b>'+nm+'</b></div><div>Cuisine: '+cu+
-          '</div><div>Coords: '+r.Latitude.toFixed(5)+', '+r.Longitude.toFixed(5)+
-          '</div><div>Year: '+currentYear+'</div></div>'
-        ));
+        const nm = (r.Name ? String(r.Name) : 'Unnamed').replace(/[`\\]/g, "'");
+        const cu = String(r.Main_Cuisine || '').replace(/[`\\]/g, "'");
+        const m = L.marker([r.Latitude, r.Longitude], { title: nm || cu }).bindPopup(
+          '<div style="min-width:180px">' +
+          '<div><b>' + nm + '</b></div>' +
+          '<div>Cuisine: ' + cu + '</div>' +
+          '<div>Coords: ' + r.Latitude.toFixed(5) + ', ' + r.Longitude.toFixed(5) + '</div>' +
+          '<div>Year: ' + currentYear + '</div>' +
+          '</div>'
+        );
+        batch.push(m);
       }
       if (batch.length) clusterLayer.addLayers(batch);
       i = next;
-      if (el) el.textContent = (i<total) ? ('Adding markers… '+i.toLocaleString()+' / '+total.toLocaleString()) : '';
-      if (i<total) setTimeout(step,0);
+      if (el) el.textContent = (i < total)
+        ? ('Adding markers… ' + i.toLocaleString() + ' / ' + total.toLocaleString())
+        : '';
+
+      if (i < total) setTimeout(step, 0);
     }
-    setTimeout(step,0);
+    setTimeout(step, 0);
   }
 
-  function updateMap() {
+function updateMap() {
     const rows = getFilteredRows();
     refreshCuisineCounts();
+
+    // Cancel any previous marker build
     cancelMarkerBuild();
+
+    // Clear layers
     clusterLayer.clearLayers();
     if (heatLayer) { map.removeLayer(heatLayer); heatLayer = null; }
 
     const modeHeat = document.getElementById('modeHeat').checked;
+
     if (modeHeat) {
       const heatPts = rows.map(r => [r.Latitude, r.Longitude, 0.6]);
       if (heatPts.length) {
@@ -356,76 +397,124 @@
       }
       return;
     }
-    if (!rows.length) { const el = document.getElementById('buildInfo'); if (el) el.textContent=''; return; }
+
+    if (!rows.length) {
+      const el = document.getElementById('buildInfo'); if (el) el.textContent = '';
+      return;
+    }
+
+    // Build markers progressively
     startMarkerBuild(rows);
-  }
+}
 
   function fitToData() {
     const rows = getFilteredRows();
     if (!rows.length) return;
-    const b = L.latLngBounds(rows.map(r=>[r.Latitude, r.Longitude]));
+    const latlngs = rows.map(r => [r.Latitude, r.Longitude]);
+    const b = L.latLngBounds(latlngs);
     map.fitBounds(b.pad(0.05));
   }
 
-  // Heatmap area (threshold alpha)
+  /* 新增：在当前缩放下估算 Heatmap 面积（阈值法）
+     thresholdAlpha ∈ [0..255]；例如 64 ≈ 25% 透明度。
+     注意：这是可视化近似（像素核），结果会随缩放变化。 */
   function measureHeatArea(thresholdAlpha = 64) {
-    if (!heatLayer) { alert('Please switch to Heatmap mode first.'); return; }
+    if (!heatLayer) {
+      alert('Please switch to Heatmap mode first.');
+      return;
+    }
+    // 兼容不同 leaflet.heat 版本
     let canvas = heatLayer._canvas;
-    if (!canvas && heatLayer._heatmap && heatLayer._heatmap._canvas) canvas = heatLayer._heatmap._canvas;
-    if (!canvas) { alert('Heatmap canvas is not ready yet. Try again in a moment.'); return; }
+    if (!canvas && heatLayer._heatmap && heatLayer._heatmap._canvas) {
+      canvas = heatLayer._heatmap._canvas;
+    }
+    if (!canvas) {
+      alert('Heatmap canvas is not ready yet. Try again in a moment.');
+      return;
+    }
     const ctx = canvas.getContext('2d');
-    const img = ctx.getImageData(0,0,canvas.width,canvas.height);
-    const data = img.data; let hot=0;
-    for (let i=3;i<data.length;i+=4){ if (data[i] >= thresholdAlpha) hot++; }
-    const c = map.getCenter(); const z = map.getZoom();
-    const metersPerPixel = 156543.03392 * Math.cos(c.lat*Math.PI/180) / Math.pow(2, z);
-    const area_km2 = (hot * metersPerPixel * metersPerPixel) / 1e6;
+    const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = img.data;
+
+    let hotPixels = 0;
+    for (let i = 3; i < data.length; i += 4) { // 只看 alpha 通道
+      if (data[i] >= thresholdAlpha) hotPixels++;
+    }
+
+    // 用地图中心的分辨率近似换算（香港区域内误差较小）
+    const c = map.getCenter();
+    const z = map.getZoom();
+    const metersPerPixel = 156543.03392 * Math.cos(c.lat * Math.PI/180) / Math.pow(2, z);
+    const area_m2 = hotPixels * metersPerPixel * metersPerPixel;
+    const area_km2 = area_m2 / 1e6;
+
     alert(`Heat area (alpha ≥ ${thresholdAlpha}/255) ≈ ${area_km2.toFixed(2)} km² at zoom ${z}`);
   }
 
-  // Events
-  document.getElementById('yearRange').addEventListener('input', (e)=>{
+  // Wire events
+  document.getElementById('yearRange').addEventListener('input', (e) => {
     currentYear = +e.target.value;
     document.getElementById('yearLabel').textContent = currentYear;
-    updateMap(); fitToData();
-  });
-  document.getElementById('modeCluster').addEventListener('change', ()=>{ updateMap(); fitToData(); });
-  document.getElementById('modeHeat').addEventListener('change', ()=>{ updateMap(); fitToData(); });
-  document.getElementById('basemapSelect').addEventListener('change', (e)=>{
-    const val = e.target.value; Object.values(basemaps).forEach(l=>map.removeLayer(l)); basemaps[val].addTo(map);
+    updateMap();
+    fitToData();
   });
 
-  document.getElementById('resetBtn').addEventListener('click', ()=>{
-    selectedCuisines = null; document.getElementById('cuisineSearch').value = '';
-    renderCuisineList(''); updateMap(); fitToData();
+  document.getElementById('modeCluster').addEventListener('change', () => { updateMap(); fitToData(); });
+  document.getElementById('modeHeat').addEventListener('change', () => { updateMap(); fitToData(); });
+
+  document.getElementById('basemapSelect').addEventListener('change', (e) => {
+    const val = e.target.value;
+    Object.values(basemaps).forEach(l => map.removeLayer(l));
+    basemaps[val].addTo(map);
   });
-  document.getElementById('clearBtn').addEventListener('click', ()=>{
-    selectedCuisines = new Set(); document.getElementById('cuisineSearch').value = '';
-    renderCuisineList(''); updateMap();
+
+  document.getElementById('resetBtn').addEventListener('click', () => {
+    selectedCuisines = null; // All
+    document.getElementById('cuisineSearch').value = '';
+    renderCuisineList('');
+    updateMap();
+    fitToData();
   });
-  document.getElementById('measureBtn').addEventListener('click', ()=>measureHeatArea(64));
-  document.getElementById('cuisineSearch').addEventListener('input', (e)=>renderCuisineList(e.target.value));
+
+  document.getElementById('clearBtn').addEventListener('click', () => {
+    selectedCuisines = new Set(); // None
+    document.getElementById('cuisineSearch').value = '';
+    renderCuisineList('');
+    updateMap();
+  });
+
+  // 新增：面积计算按钮
+  document.getElementById('measureBtn').addEventListener('click', () => measureHeatArea(64));
+
+  document.getElementById('cuisineSearch').addEventListener('input', (e) => renderCuisineList(e.target.value));
   document.getElementById('fitBtn').addEventListener('click', fitToData);
 
-  document.getElementById('playBtn').addEventListener('click', ()=>{
-    playing = !playing; const btn = document.getElementById('playBtn'); btn.textContent = playing ? '⏸︎' : '▶︎';
+  document.getElementById('playBtn').addEventListener('click', () => {
+    playing = !playing;
+    const btn = document.getElementById('playBtn');
+    btn.textContent = playing ? '⏸︎' : '▶︎';
     if (playing) {
-      playTimer = setInterval(()=>{
+      playTimer = setInterval(() => {
         const yr = +document.getElementById('yearRange').value;
-        const next = yr >= 2025 ? 2016 : yr + 1;
+        const next = yr >= 2023 ? 2018 : yr + 1;
         document.getElementById('yearRange').value = next;
         currentYear = next;
         document.getElementById('yearLabel').textContent = currentYear;
         updateMap();
-        if (!document.getElementById('modeHeat').checked) { fitToData(); } // Heatmap 不自动 fit
+        // 注意：自动播放时 Heatmap 下不自动 fit（保持你之前的行为）
+        if (!document.getElementById('modeHeat').checked) { fitToData(); }
       }, 1200);
-    } else { clearInterval(playTimer); }
+    } else {
+      clearInterval(playTimer);
+    }
   });
 
-  (async function main(){
+  (async function main() {
     document.getElementById('yearLabel').textContent = currentYear;
     await initData();
-    updateMap(); fitToData(); positionPanel();
+    updateMap();
+    fitToData();
+    positionPanel();
   })();
 </script>
 </body>
