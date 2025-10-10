@@ -220,23 +220,38 @@
 
   // 构造“排序后的菜系”数组：Thai/Vietnamese 强制加入；Other 永远放最后；其余按字母序
   function computeOrderedCuisines() {
-    let arr = Array.from(allCuisines);
-    // 强制包含
-    ['Thai','Vietnamese'].forEach(t => {
-      if (!arr.some(x => x.toLowerCase() === t.toLowerCase())) {
-        arr.push(t);
-        allCuisines.add(t); // 使其在选择集内也可被选中（即使该年为 0）
-      }
-    });
-    // 排序：除 Other 外按字母序；Other 放末尾
-    arr.sort((a,b) => {
-      const ao = a.toLowerCase()==='other', bo = b.toLowerCase()==='other';
-      if (ao && !bo) return 1;
-      if (!ao && bo) return -1;
-      return a.localeCompare(b);
-    });
-    return arr;
-  }
+      // 集合转数组
+      let arr = Array.from(allCuisines);
+    
+      // 强制包含（即使某年为 0，也显示在列表）
+      ['Thai','Vietnamese','Hong Kong Local','Other'].forEach(t => {
+        if (!arr.some(x => x.toLowerCase() === t.toLowerCase())) {
+          arr.push(t);
+          allCuisines.add(t);
+        }
+      });
+    
+      const PIN_TOP = ['Hong Kong Local'];   // 想再固定更多，往这里加
+      const PIN_BOTTOM = ['Other'];          // 想固定置底更多，也加这里
+    
+      // 排序规则：先比较置顶，其次比较置底，最后按字母序
+      arr.sort((a, b) => {
+        const al = a.toLowerCase(), bl = b.toLowerCase();
+    
+        const aTop = PIN_TOP.findIndex(p => p.toLowerCase() === al);
+        const bTop = PIN_TOP.findIndex(p => p.toLowerCase() === bl);
+        if (aTop !== -1 || bTop !== -1) return (aTop === -1) ? 1 : (bTop === -1 ? -1 : aTop - bTop);
+    
+        const aBottom = PIN_BOTTOM.findIndex(p => p.toLowerCase() === al);
+        const bBottom = PIN_BOTTOM.findIndex(p => p.toLowerCase() === bl);
+        if (aBottom !== -1 || bBottom !== -1) return (aBottom === -1) ? -1 : (bBottom === -1 ? 1 : aBottom - bBottom);
+    
+        return a.localeCompare(b);
+      });
+    
+      return arr;
+    }
+
 
   async function initData() {
     const years = Object.keys(YEAR_FILES).map(Number).sort((a,b)=>a-b);
