@@ -193,12 +193,24 @@
       Papa.parse(url, {
         header: true, download: true, dynamicTyping: true, skipEmptyLines: true,
         complete: (res) => {
-          const cleaned = res.data.map(row => ({
-            Main_Cuisine: (row.Main_Cuisine ?? row.main_cuisine ?? row.Cuisine ?? '').toString().trim(),
-            Latitude: parseFloat(row.Latitude ?? row.latitude ?? row.lat),
-            Longitude: parseFloat(row.Longitude ?? row.longitude ?? row.lon ?? row.lng),
-            Name: row.Name ?? row.Restaurant_Name ?? row.name ?? '',
-          })).filter(r => Number.isFinite(r.Latitude) && Number.isFinite(r.Longitude) && r.Main_Cuisine);
+          const cleaned = res.data.map(row => {
+              // 取出菜系原值（大小写与空格都先标准化）
+              let mc = (row.Main_Cuisine ?? row.main_cuisine ?? row.Cuisine ?? '').toString().trim();
+            
+              // 显示时将“Mainland China”统一为“Chinese Mainland”
+              // （对大小写和“Mainland  China”等空格小差异也做了兼容）
+              if (/^mainland\s*china$/i.test(mc)) {
+                mc = 'Chinese Mainland';
+              }
+            
+              return {
+                Main_Cuisine: mc,
+                Latitude: parseFloat(row.Latitude ?? row.latitude ?? row.lat),
+                Longitude: parseFloat(row.Longitude ?? row.longitude ?? row.lon ?? row.lng),
+                Name: row.Name ?? row.Restaurant_Name ?? row.name ?? '',
+              };
+            }).filter(r => Number.isFinite(r.Latitude) && Number.isFinite(r.Longitude) && r.Main_Cuisine);
+
           resolve(cleaned);
         },
         error: reject
