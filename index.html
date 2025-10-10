@@ -224,14 +224,14 @@
       let arr = Array.from(allCuisines);
     
       // 强制包含（即使某年为 0，也显示在列表）
-      ['Thai','Vietnamese','Hong Kong Local','Other'].forEach(t => {
+      ['Thai','Vietnamese','Hong Kong Style','Other'].forEach(t => {
         if (!arr.some(x => x.toLowerCase() === t.toLowerCase())) {
           arr.push(t);
           allCuisines.add(t);
         }
       });
     
-      const PIN_TOP = ['Hong Kong Local'];   // 想再固定更多，往这里加
+      const PIN_TOP = ['Hong Kong Style'];   // 想再固定更多，往这里加
       const PIN_BOTTOM = ['Other'];          // 想固定置底更多，也加这里
     
       // 排序规则：先比较置顶，其次比较置底，最后按字母序
