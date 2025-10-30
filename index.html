@@ -39,7 +39,9 @@
       z-index: 500;
     }
     #map { width: 100%; height: 100%; }
-    .pill { padding: 6px 10px; border: 1px solid #e5e7eb; border-radius: 999px; background: #fff; }
+    .pill {
+    /* Year dropdown styles */
+    /* style injected */ padding: 6px 10px; border: 1px solid #e5e7eb; border-radius: 999px; background: #fff; }
     .btn { padding: 6px 10px; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; cursor: pointer; }
     .btn:active { transform: translateY(1px); }
     .panel {
@@ -60,6 +62,11 @@
       .panel { left: 50%; right: auto; transform: translateX(-50%); width: min(92vw, 360px); max-height: 45vh; }
     }
   </style>
+
+<style>
+#toolbar select { padding: 4px 8px; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; }
+#yearSelect { min-width: 96px; }
+</style>
 </head>
 <body>
 <div id="app">
@@ -67,7 +74,8 @@
     <div class="flex" style="gap:14px;">
       <div class="pill">
         <span class="muted">Year:</span>
-        <input id="yearRange" type="range" min="2016" max="2025" step="1" value="2016" style="vertical-align: middle;">
+        <select id="yearSelect" title="Jump to year"></select>
+<input id="yearRange" type="range" min="2016" max="2025" step="1" value="2016" style="vertical-align: middle;">
         <strong id="yearLabel">2016</strong>
         <button id="playBtn" class="btn" title="Auto-play">▶︎</button>
         <button id="fitBtn" class="btn" title="Fit to current data">Fit</button>
@@ -144,6 +152,10 @@
     2024: "data/202401_processed.csv",
     2025: "data/202501_processed.csv"
   };
+
+  // Years list derived from YEAR_FILES (injected)
+  const YEARS = Object.keys(YEAR_FILES).map(Number).sort((a,b)=>a-b);
+
 
   // State
   const dataByYear = {};
@@ -281,6 +293,7 @@
       currentYear = firstWithData;
       document.getElementById('yearRange').value = firstWithData;
       document.getElementById('yearLabel').textContent = firstWithData;
+    const ys = document.getElementById('yearSelect'); if (ys) ys.value = String(firstWithData);
     }
   }
 
@@ -414,10 +427,11 @@
 
   // Events
   document.getElementById('yearRange').addEventListener('input', (e)=>{
-    currentYear = +e.target.value;
+currentYear = +e.target.value;
     document.getElementById('yearLabel').textContent = currentYear;
     updateMap(); fitToData();
-  });
+    const ys = document.getElementById('yearSelect'); if (ys) ys.value = String(currentYear);
+});
   document.getElementById('modeCluster').addEventListener('change', ()=>{ updateMap(); fitToData(); });
   document.getElementById('modeHeat').addEventListener('change', ()=>{ updateMap(); fitToData(); });
   document.getElementById('basemapSelect').addEventListener('change', (e)=>{
@@ -451,9 +465,34 @@
     } else { clearInterval(playTimer); }
   });
 
-  (async function main(){
+  
+  function initYearSelect() {
+    const sel = document.getElementById("yearSelect");
+    if (!sel) return;
+    const ys = (typeof YEARS !== "undefined" ? YEARS : (function(){
+      try { return Object.keys(YEAR_FILES).map(Number).sort((a,b)=>a-b); } catch(e){ return []; }
+    })());
+    sel.innerHTML = ys.map(y => `<option value="${y}">${y}</option>`).join("");
+    if (typeof currentYear !== "undefined") sel.value = String(currentYear);
+    sel.addEventListener("change", (e)=>{
+      const y = +e.target.value;
+      if (!isFinite(y)) return;
+      window.currentYear = y;
+      const slider = document.getElementById("yearRange"); if (slider) slider.value = y;
+      const lbl = document.getElementById("yearLabel"); if (lbl) lbl.textContent = y;
+      // stop autoplay if running
+      try {
+        if (window.playing) { window.playing = false; if (window.playTimer) clearInterval(window.playTimer); const pb = document.getElementById("playBtn"); if (pb) pb.textContent = "▶︎"; }
+      } catch(e){}
+      try { updateMap(); } catch(e){}
+      try { fitToData(); } catch(e){}
+    });
+  }
+(async function main(){
     document.getElementById('yearLabel').textContent = currentYear;
-    await initData();
+    
+    try { initYearSelect(); } catch(e){}
+await initData();
     updateMap(); fitToData(); positionPanel();
   })();
 </script>
