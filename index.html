@@ -39,9 +39,7 @@
       z-index: 500;
     }
     #map { width: 100%; height: 100%; }
-    .pill {
-    /* Year dropdown styles */
-    /* style injected */ padding: 6px 10px; border: 1px solid #e5e7eb; border-radius: 999px; background: #fff; }
+    .pill { padding: 6px 10px; border: 1px solid #e5e7eb; border-radius: 999px; background: #fff; }
     .btn { padding: 6px 10px; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; cursor: pointer; }
     .btn:active { transform: translateY(1px); }
     .panel {
@@ -62,19 +60,6 @@
       .panel { left: 50%; right: auto; transform: translateX(-50%); width: min(92vw, 360px); max-height: 45vh; }
     }
   </style>
-
-<style>
-#toolbar select { padding: 4px 8px; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; }
-#yearSelect { min-width: 96px; }
-</style>
-
-<style>
-.toast { position: fixed; right: 16px; top: 72px; padding: 12px 14px; border-radius: 12px; background: #fff; border: 1px solid #e5e7eb; box-shadow: 0 10px 20px rgba(0,0,0,.08); opacity: 0; transform: translateY(-6px); transition: all .25s ease; z-index: 9999; max-width: 520px; }
-.toast.show { opacity: 1; transform: translateY(0); }
-.toast.warn { border-color: #f59e0b; background: #fffbeb; }
-.toast code { background: rgba(0,0,0,.05); padding: 0 4px; border-radius: 4px; }
-#noDataToast { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; font-size: 14px; }
-</style>
 </head>
 <body>
 <div id="app">
@@ -82,8 +67,7 @@
     <div class="flex" style="gap:14px;">
       <div class="pill">
         <span class="muted">Year:</span>
-        <select id="yearSelect" title="Jump to year"></select>
-<input id="yearRange" type="range" min="2016" max="2025" step="1" value="2016" style="vertical-align: middle;">
+        <input id="yearRange" type="range" min="2016" max="2025" step="1" value="2016" style="vertical-align: middle;">
         <strong id="yearLabel">2016</strong>
         <button id="playBtn" class="btn" title="Auto-play">▶︎</button>
         <button id="fitBtn" class="btn" title="Fit to current data">Fit</button>
@@ -160,10 +144,6 @@
     2024: "data/202401_processed.csv",
     2025: "data/202501_processed.csv"
   };
-
-  // Years list derived from YEAR_FILES (injected)
-  const YEARS = Object.keys(YEAR_FILES).map(Number).sort((a,b)=>a-b);
-
 
   // State
   const dataByYear = {};
@@ -297,7 +277,11 @@
 
     // Jump to first year with data
     const firstWithData = years.find(y => (dataByYear[y]||[]).length>0);
-    if (firstWithData) { setYear(firstWithData, {fit:false, stop:false}); }
+    if (firstWithData) {
+      currentYear = firstWithData;
+      document.getElementById('yearRange').value = firstWithData;
+      document.getElementById('yearLabel').textContent = firstWithData;
+    }
   }
 
   function isAllSelected(){ return selectedCuisines === null; }
@@ -430,11 +414,10 @@
 
   // Events
   document.getElementById('yearRange').addEventListener('input', (e)=>{
-currentYear = +e.target.value;
+    currentYear = +e.target.value;
     document.getElementById('yearLabel').textContent = currentYear;
     updateMap(); fitToData();
-    const ys = document.getElementById('yearSelect'); if (ys) ys.value = String(currentYear);
-});
+  });
   document.getElementById('modeCluster').addEventListener('change', ()=>{ updateMap(); fitToData(); });
   document.getElementById('modeHeat').addEventListener('change', ()=>{ updateMap(); fitToData(); });
   document.getElementById('basemapSelect').addEventListener('change', (e)=>{
@@ -468,78 +451,11 @@ currentYear = +e.target.value;
     } else { clearInterval(playTimer); }
   });
 
-  
-  function initYearSelect() {
-  const sel = document.getElementById("yearSelect");
-  if (!sel) return;
-  const ys = (typeof YEARS !== "undefined" ? YEARS : (function(){
-    try { return Object.keys(YEAR_FILES).map(Number).sort((a,b)=>a-b); }  })());
-  sel.innerHTML = ys.map(y => `<option value="${y}">${y}</option>`).join("");
-  if (typeof currentYear !== "undefined") sel.value = String(currentYear);
-  const handler = (ev) => { setYear(ev.target.value, {fit:true, stop:true}); };
-  sel.addEventListener("change", handler);
-  sel.addEventListener("input", handler);
-}
-  })());
-  sel.innerHTML = ys.map(y => `<option value="${y}">${y}</option>`).join("");
-  if (typeof currentYear !== "undefined") sel.value = String(currentYear);
-  const handler = (ev) => { setYear(ev.target.value, {fit:true, stop:true}); };
-  sel.addEventListener("change", handler);
-  sel.addEventListener("input", handler);
-}
- catch(e){ return []; }
-    })());
-    sel.innerHTML = ys.map(y => `<option value="${y}">${y}</option>`).join("");
-    if (typeof currentYear !== "undefined") sel.value = String(currentYear);
-    sel.addEventListener("change", (e)=>{
-      const y = +e.target.value;
-      if (!isFinite(y)) return;
-      window.currentYear = y;
-      const slider = document.getElementById("yearRange"); if (slider) slider.value = y;
-      const lbl = document.getElementById("yearLabel"); if (lbl) lbl.textContent = y;
-      // stop autoplay if running
-      try {
-        if (window.playing) { window.playing = false; if (window.playTimer) clearInterval(window.playTimer); const pb = document.getElementById("playBtn"); if (pb) pb.textContent = "▶︎"; }
-      } catch(e){}
-      try { updateMap(); } catch(e){}
-      try { fitToData(); } catch(e){}
-    });
-  }
-
-  // Unified setter for year changes (slider & dropdown)
-  function setYear(y, opts={fit:true, stop:true}) {
-    const yy = +y; if (!Number.isFinite(yy)) return;
-    currentYear = yy;
-    const slider = document.getElementById("yearRange"); if (slider) slider.value = yy;
-    const lbl = document.getElementById("yearLabel"); if (lbl) lbl.textContent = yy;
-    const sel = document.getElementById("yearSelect"); if (sel) sel.value = String(yy);
-    if (opts && opts.stop && typeof playing !== "undefined" && playing) {
-      try { playing = false; if (typeof playTimer !== "undefined" && playTimer) clearInterval(playTimer);
-        const pb = document.getElementById("playBtn"); if (pb) pb.textContent = "▶︎"; } catch(e){}
-    }
-    try { updateMap(); } catch(e){}
-    if (opts && opts.fit) { try { fitToData(); } catch(e){} }
-  }
-
-  function showNoDataWarning() {
-    const note = document.createElement("div");
-    note.id = "noDataToast";
-    note.className = "toast warn";
-    note.innerHTML = `⚠️ Data not found.<br>
-      Place <code>index.html</code> in the same folder as your project with the <code>data/</code> directory (e.g., <code>data/201601_processed.csv</code>).`;
-    document.body.appendChild(note);
-    setTimeout(()=>{ note.classList.add("show"); }, 50);
-  }
-(async function main(){
+  (async function main(){
     document.getElementById('yearLabel').textContent = currentYear;
-    
-    try { initYearSelect(); } catch(e){}
-await initData();
-    const hasAny = Object.values(dataByYear || {}).some(arr => Array.isArray(arr) && arr.length);
-    if (!hasAny) { try { showNoDataWarning(); } catch(e){} }
-
+    await initData();
     updateMap(); fitToData(); positionPanel();
-})();
+  })();
 </script>
 </body>
 </html>
