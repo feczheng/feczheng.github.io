@@ -473,7 +473,13 @@ currentYear = +e.target.value;
   const sel = document.getElementById("yearSelect");
   if (!sel) return;
   const ys = (typeof YEARS !== "undefined" ? YEARS : (function(){
-    try { return Object.keys(YEAR_FILES).map(Number).sort((a,b)=>a-b); } catch(e){ return []; }
+    try { return Object.keys(YEAR_FILES).map(Number).sort((a,b)=>a-b); }  })());
+  sel.innerHTML = ys.map(y => `<option value="${y}">${y}</option>`).join("");
+  if (typeof currentYear !== "undefined") sel.value = String(currentYear);
+  const handler = (ev) => { setYear(ev.target.value, {fit:true, stop:true}); };
+  sel.addEventListener("change", handler);
+  sel.addEventListener("input", handler);
+}
   })());
   sel.innerHTML = ys.map(y => `<option value="${y}">${y}</option>`).join("");
   if (typeof currentYear !== "undefined") sel.value = String(currentYear);
