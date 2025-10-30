@@ -122,7 +122,7 @@
    <div class="footer-note">
       Map data © OpenStreetMap contributors; tiles by OSM / Carto.<br/>
       Data collected and website created by Zheng Gang, with guidance from Prof. Peter K. Koh and the Koh Research Group (Department of Geography, The University of Hong Kong).
-      <span class="muted">— build 20201013-01</span>
+      <span class="muted">— build 20251030-01</span>
    </div>
 </div>
 
@@ -289,12 +289,7 @@
 
     // Jump to first year with data
     const firstWithData = years.find(y => (dataByYear[y]||[]).length>0);
-    if (firstWithData) {
-      currentYear = firstWithData;
-      document.getElementById('yearRange').value = firstWithData;
-      document.getElementById('yearLabel').textContent = firstWithData;
-    const ys = document.getElementById('yearSelect'); if (ys) ys.value = String(firstWithData);
-    }
+    if (firstWithData) { setYear(firstWithData, {fit:false, stop:false}); }
   }
 
   function isAllSelected(){ return selectedCuisines === null; }
@@ -467,10 +462,18 @@ currentYear = +e.target.value;
 
   
   function initYearSelect() {
-    const sel = document.getElementById("yearSelect");
-    if (!sel) return;
-    const ys = (typeof YEARS !== "undefined" ? YEARS : (function(){
-      try { return Object.keys(YEAR_FILES).map(Number).sort((a,b)=>a-b); } catch(e){ return []; }
+  const sel = document.getElementById("yearSelect");
+  if (!sel) return;
+  const ys = (typeof YEARS !== "undefined" ? YEARS : (function(){
+    try { return Object.keys(YEAR_FILES).map(Number).sort((a,b)=>a-b); } catch(e){ return []; }
+  })());
+  sel.innerHTML = ys.map(y => `<option value="${y}">${y}</option>`).join("");
+  if (typeof currentYear !== "undefined") sel.value = String(currentYear);
+  const handler = (ev) => { setYear(ev.target.value, {fit:true, stop:true}); };
+  sel.addEventListener("change", handler);
+  sel.addEventListener("input", handler);
+}
+ catch(e){ return []; }
     })());
     sel.innerHTML = ys.map(y => `<option value="${y}">${y}</option>`).join("");
     if (typeof currentYear !== "undefined") sel.value = String(currentYear);
@@ -487,6 +490,21 @@ currentYear = +e.target.value;
       try { updateMap(); } catch(e){}
       try { fitToData(); } catch(e){}
     });
+  }
+
+  // Unified setter for year changes (slider & dropdown)
+  function setYear(y, opts={fit:true, stop:true}) {
+    const yy = +y; if (!Number.isFinite(yy)) return;
+    currentYear = yy;
+    const slider = document.getElementById("yearRange"); if (slider) slider.value = yy;
+    const lbl = document.getElementById("yearLabel"); if (lbl) lbl.textContent = yy;
+    const sel = document.getElementById("yearSelect"); if (sel) sel.value = String(yy);
+    if (opts && opts.stop && typeof playing !== "undefined" && playing) {
+      try { playing = false; if (typeof playTimer !== "undefined" && playTimer) clearInterval(playTimer);
+        const pb = document.getElementById("playBtn"); if (pb) pb.textContent = "▶︎"; } catch(e){}
+    }
+    try { updateMap(); } catch(e){}
+    if (opts && opts.fit) { try { fitToData(); } catch(e){} }
   }
 (async function main(){
     document.getElementById('yearLabel').textContent = currentYear;
