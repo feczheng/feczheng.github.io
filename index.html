@@ -67,6 +67,14 @@
 #toolbar select { padding: 4px 8px; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; }
 #yearSelect { min-width: 96px; }
 </style>
+
+<style>
+.toast { position: fixed; right: 16px; top: 72px; padding: 12px 14px; border-radius: 12px; background: #fff; border: 1px solid #e5e7eb; box-shadow: 0 10px 20px rgba(0,0,0,.08); opacity: 0; transform: translateY(-6px); transition: all .25s ease; z-index: 9999; max-width: 520px; }
+.toast.show { opacity: 1; transform: translateY(0); }
+.toast.warn { border-color: #f59e0b; background: #fffbeb; }
+.toast code { background: rgba(0,0,0,.05); padding: 0 4px; border-radius: 4px; }
+#noDataToast { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; font-size: 14px; }
+</style>
 </head>
 <body>
 <div id="app">
@@ -122,7 +130,7 @@
    <div class="footer-note">
       Map data © OpenStreetMap contributors; tiles by OSM / Carto.<br/>
       Data collected and website created by Zheng Gang, with guidance from Prof. Peter K. Koh and the Koh Research Group (Department of Geography, The University of Hong Kong).
-      <span class="muted">— build 20251030-01</span>
+      <span class="muted">— build 20201013-01</span>
    </div>
 </div>
 
@@ -506,13 +514,26 @@ currentYear = +e.target.value;
     try { updateMap(); } catch(e){}
     if (opts && opts.fit) { try { fitToData(); } catch(e){} }
   }
+
+  function showNoDataWarning() {
+    const note = document.createElement("div");
+    note.id = "noDataToast";
+    note.className = "toast warn";
+    note.innerHTML = `⚠️ Data not found.<br>
+      Place <code>index.html</code> in the same folder as your project with the <code>data/</code> directory (e.g., <code>data/201601_processed.csv</code>).`;
+    document.body.appendChild(note);
+    setTimeout(()=>{ note.classList.add("show"); }, 50);
+  }
 (async function main(){
     document.getElementById('yearLabel').textContent = currentYear;
     
     try { initYearSelect(); } catch(e){}
 await initData();
+    const hasAny = Object.values(dataByYear || {}).some(arr => Array.isArray(arr) && arr.length);
+    if (!hasAny) { try { showNoDataWarning(); } catch(e){} }
+
     updateMap(); fitToData(); positionPanel();
-  })();
+})();
 </script>
 </body>
 </html>
