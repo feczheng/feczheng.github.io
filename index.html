@@ -60,6 +60,11 @@
       .panel { left: 50%; right: auto; transform: translateX(-50%); width: min(92vw, 360px); max-height: 45vh; }
     }
   </style>
+
+<style>
+#toolbar select { padding: 4px 8px; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; }
+#yearSelect { min-width: 96px; }
+</style>
 </head>
 <body>
 <div id="app">
@@ -67,6 +72,7 @@
     <div class="flex" style="gap:14px;">
       <div class="pill">
         <span class="muted">Year:</span>
+        <select id="yearSelect" title="Jump to year"></select>
         <input id="yearRange" type="range" min="2016" max="2025" step="1" value="2016" style="vertical-align: middle;">
         <strong id="yearLabel">2016</strong>
         <button id="playBtn" class="btn" title="Auto-play">▶︎</button>
@@ -144,6 +150,10 @@
     2024: "data/202401_processed.csv",
     2025: "data/202501_processed.csv"
   };
+
+  // Years derived from YEAR_FILES
+  const YEARS = Object.keys(YEAR_FILES).map(Number).sort((a,b)=>a-b);
+
 
   // State
   const dataByYear = {};
@@ -282,6 +292,7 @@
       document.getElementById('yearRange').value = firstWithData;
       document.getElementById('yearLabel').textContent = firstWithData;
     }
+    { const ys = document.getElementById('yearSelect'); if (ys) ys.value = String(firstWithData); }
   }
 
   function isAllSelected(){ return selectedCuisines === null; }
@@ -412,12 +423,32 @@
     alert(`Heat area (alpha ≥ ${thresholdAlpha}/255) ≈ ${area_km2.toFixed(2)} km² at zoom ${z}`);
   }
 
+  // Populate and wire the Year dropdown
+  function initYearSelect() {
+    const sel = document.getElementById("yearSelect");
+    if (!sel) return;
+    sel.innerHTML = YEARS.map(y => `<option value="${y}">${y}</option>`).join("");
+    sel.value = String(currentYear);
+    const handler = (ev) => {
+      const y = +ev.target.value; if (!Number.isFinite(y)) return;
+      // stop autoplay if running
+      if (playing) { playing = false; if (playTimer) clearInterval(playTimer); const btn = document.getElementById("playBtn"); if (btn) btn.textContent = "▶︎"; }
+      currentYear = y;
+      const slider = document.getElementById("yearRange"); if (slider) slider.value = y;
+      const lbl = document.getElementById("yearLabel"); if (lbl) lbl.textContent = y;
+      updateMap(); fitToData();
+    };
+    sel.addEventListener("change", handler);
+    sel.addEventListener("input", handler);
+  }
+
   // Events
   document.getElementById('yearRange').addEventListener('input', (e)=>{
-    currentYear = +e.target.value;
-    document.getElementById('yearLabel').textContent = currentYear;
-    updateMap(); fitToData();
-  });
+  currentYear = +e.target.value;
+  document.getElementById('yearLabel').textContent = currentYear;
+  const ys = document.getElementById('yearSelect'); if (ys) ys.value = String(currentYear);
+  updateMap(); fitToData();
+});
   document.getElementById('modeCluster').addEventListener('change', ()=>{ updateMap(); fitToData(); });
   document.getElementById('modeHeat').addEventListener('change', ()=>{ updateMap(); fitToData(); });
   document.getElementById('basemapSelect').addEventListener('change', (e)=>{
@@ -453,7 +484,9 @@
 
   (async function main(){
     document.getElementById('yearLabel').textContent = currentYear;
-    await initData();
+    
+    initYearSelect();
+await initData();
     updateMap(); fitToData(); positionPanel();
   })();
 </script>
