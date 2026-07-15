@@ -1,38 +1,51 @@
-# Hong Kong Restaurant Cuisines (2018–2023)
+# Hong Kong Licensed Restaurant Cuisines (January 2016–January 2025)
 
-Data collected and website created by **Zheng Gang**.  
-Supervised by **Prof. Peter K. Koh** (HKU).
+Interactive point map for ten January snapshots of Hong Kong licensed restaurants. Data were collected and the website was created by Zheng Gang, Department of Geography, The University of Hong Kong, under the supervision of Prof. Peter K. Koh.
 
-## Author
-**Zheng Gang**  
-PhD Candidate, Department of Geography, The University of Hong Kong (HKU)
+## Data scope
 
-## Data format
-- CSV columns required: `Main_Cuisine`, `Longitude`, `Latitude`
-- Optional: `Name`
-- Default file paths under `data/`:
-  - `201801_processed.csv`
-  - `201901_processed.csv`
-  - `202001_processed.csv`
-  - `202101_processed.csv`
-  - `202201_processed.csv`
-  - `202301_processed.csv`
+- Food and Environmental Hygiene Department (FEHD) licensed-restaurant stock in each January snapshot.
+- OpenRice Hong Kong labels collected in 2025, plus manually verified online sources, supplement cuisine identification.
+- Counts are licence-stock snapshots, not annual openings, closures, sales, or real-time operating status.
+- Source labels `Mainland China` and `Chinese Mainland` are aliases and are both displayed as `Chinese Mainland`.
+- `Hong Kong Style` is displayed as `Hong Kong-style`; `Taiwan` is displayed as `Taiwanese`.
+- The residual `Other` category contains only records labelled `Other` or an otherwise unrecognised source label.
 
-## Quick start (local)
-Open `index.html` with any static server (e.g., VS Code Live Server).
+The canonical display categories are `Hong Kong-style`, `Western`, `Chinese Mainland`, `Japanese`, `Korean`, `Taiwanese`, `Vietnamese`, `Thai`, and `Other`.
 
-## Deploy to GitHub Pages
-- Personal site: create repo `your-username.github.io`, put files in root, visit `https://your-username.github.io/`
-- Project site: any repo → Settings → Pages → Deploy from a branch → `main` → `/root`
+## Data files
 
-## Notes
-- Keep OSM/CARTO attributions.
-- If performance is an issue with many points, switch to Heatmap mode or pre-aggregate points (e.g., 400m hex bins).
+The page reads these source CSVs without modifying them:
+
+- `data/201601_processed.csv`
+- `data/201701_processed.csv`
+- `data/201801_processed.csv`
+- `data/201901_processed.csv`
+- `data/202001_processed.csv`
+- `data/202101_processed.csv`
+- `data/202201_processed.csv`
+- `data/202301_processed.csv`
+- `data/202401_processed.csv`
+- `data/202501_processed.csv`
+
+Required columns are `Main_Cuisine`, `Longitude`, and `Latitude`; `Name` is optional. The ten all-category totals are `13,478`, `13,869`, `14,461`, `14,986`, `15,455`, `15,880`, `16,412`, `16,812`, `16,966`, and `16,729`.
+
+## Interpretation
+
+Marker clusters and the heat layer are exploratory display tools. The heat layer uses screen-space pixels and changes with zoom; it is not the manuscript's projected 400 m kernel-density estimate, net-change surface, or footprint measure. Use the explicit **Fit** button when a new extent is wanted so that year-to-year map comparisons keep a stable viewport.
+
+## Run locally
+
+Serve the repository with any static web server, for example:
+
+```bash
+python3 -m http.server 8080
+```
+
+Then open `http://127.0.0.1:8080/`.
 
 ## Acknowledgements
-- Map tiles & data © OpenStreetMap contributors.  
-- Built with Leaflet, Leaflet.markercluster, and Leaflet.heat.
 
-## Copyright
-© 2025 **Zheng Gang**. All rights reserved.  
-Map data © OpenStreetMap contributors. Library copyrights belong to their respective owners.
+Map tiles and data © OpenStreetMap contributors. Built with Leaflet, Leaflet.markercluster, Leaflet.heat, Papa Parse, and D3.
+
+© 2026 Zheng Gang. All rights reserved. Library copyrights belong to their respective owners.
